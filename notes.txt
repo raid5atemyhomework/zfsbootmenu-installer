@@ -447,3 +447,17 @@ Since PureOS is a Debian derivative, this should work, we
 hope.
 If that works, we can explicitly add a `ID_LIKE=debian`
 into the `os-release` file.
+
+---------------------------
+
+GPT GUIDs
+
+    EF02 BIOS boot partitions
+    EF00 EFI system
+    BE00 Solaris boot
+    BF00 Solaris root
+    BF01 Solaris /usr & Mac Z
+    8200 Linux swap
+    8300 Linux file system
+    FD00 Linux RAID
+

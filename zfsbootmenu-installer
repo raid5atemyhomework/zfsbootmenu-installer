@@ -493,6 +493,11 @@ README
 		exit 0
 		;;
 
+	prepare-esp-in-work)
+		"$0" mkdir-p $WORKDIR/esp || exit 1
+		exec "$0" prepare-esp $WORKDIR/esp
+		;;
+
 	################################################# Prepare a reference ESP
 
 	################################################# distro
@@ -1531,6 +1536,78 @@ DANGER
 		exit 0
 		;;
 
+        ################################################# ESP search
+
+	lsdisk-with-esp)
+		for DISK in `"$0" lsdisk`; do
+			if "$0" disk-has-esp $DISK; then
+				echo $DISK
+			fi
+		done
+		exit 0
+		;;
+
+	disk-has-esp)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": requires DISK argument >&2
+			exit 1
+		fi
+		DISK=$2
+		"$0" ensure lsblk
+		if lsblk -o NAME "$DISK" > /dev/null 2>&1; then :; else
+			# not a disk
+			exit 1
+		fi
+		if test X"`lsblk -e 7 -o PARTTYPENAME $DISK -n | grep 'EFI System'`" '=' X; then
+			exit 1
+		else
+			exit 0
+		fi
+		;;
+
+	get-disk-esp)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": requires DISK argument >&2
+			exit 1
+		fi
+		DISK=$2
+		lsblk -e 7 -o PATH,PARTTYPENAME -nP "$DISK" | grep '"EFI System"$' | sed -e 's/^PATH="//' -e 's/".*$//'
+		exit 0
+		;;
+
+	select-disk-reflash-esp)
+		"$0" lsdisk-with-esp | fzf --layout=reverse-list --no-input --border --border-label='Select disk to Reflash ESP' --preview="$0"' preview-disk {} no'
+		exit 0
+		;;
+
+        ################################################# ESP search
+
+        ################################################# ESP flashing
+
+	# Needs $WORKDIR/esp
+	flash-esp-from-work)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": requires DISK argument >&2
+			exit 1
+		fi
+		if test '!' -d $WORKDIR/esp; then
+			echo "$0": no prepared ESP in workdir >&2
+			exit 1
+		fi
+		DISK=$2
+		ESP=`"$0" get-disk-esp "$DISK"`
+		echo "---- zfsbootmenu-installer: Flashing ESP: $DISK"
+		"$0" ensure rsync || exit 1
+		"$0" mkdir-p $WORKDIR/mnt || exit 1
+		mount -t vfat "$ESP" $WORKDIR/mnt || exit 1
+		# The `/` after `/esp` is significant!
+		rsync -r $WORKDIR/esp/ $WORKDIR/mnt
+		echo "---- zfsbootmenu-installer: ESP flashed: $DISK"
+		exit 0
+		;;
+
+        ################################################# ESP flashing
+
         ################################################# Main Menu
 
 	Initialize)
@@ -1563,8 +1640,17 @@ DANGER
 		;;
 
 	ReflashESP)
-		echo "$0": Not yet implemented >&2
-		exit 1
+		DISK=`"$0" select-disk-reflash-esp`
+		if "$0" disk-has-esp "$DISK"; then :; else
+			echo "---- zfsbootmenu-installer: ReflashESP: cancelled"
+			exit 0
+		fi
+		echo "---- zfsbootmenu-installer: ReflashESP: $DISK"
+		"$0" prepare-esp-in-work && \
+		"$0" flash-esp-from-work $DISK
+		EXIT_CODE=$?
+		"$0" clean-up-work
+		exit $EXIT_CODE
 		;;
 
 	PrepareNewDisk)
