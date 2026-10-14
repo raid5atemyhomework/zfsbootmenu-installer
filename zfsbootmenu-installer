@@ -193,6 +193,96 @@ DESC
 		exit 0
 		;;
 
+        ################################################# ensures
+
+	# TODO: Adapt to the system's package manager.
+	ensure)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": require TOOL argument >&2
+			exit 1
+		fi
+		TOOL="$2"
+		if which "$TOOL" > /dev/null 2>&1; then
+			# Already installed.
+			exit 0
+		fi
+		# TODO: figure out the system's package manager
+		exec "$0" ensure-apt "$TOOL"
+		;;
+
+	ensure-apt)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": require TOOL argument >&2
+			exit 1
+		fi
+		TOOL="$2"
+		case "$TOOL" in
+			# Add special cases here where
+			# the tool name is not the same
+			# as the package name.
+			# Note that various distros might
+			# have different package namings
+			# too.... SIGH
+			# Worse, some distros might put
+			# some tools together, that other
+			# distros keep in separate packages.
+			# This is why 'ensure' names tools
+			# and not packages.
+
+			# For tools whose package has
+			# different names depending on
+			# distro, we could do:
+			#      apt -y distro1-package > /dev/null 2>&1
+			#      apt -y package-distro2 > /dev/null 2>&1
+			#      if which "$TOOL" > /dev/null 2>&1; then
+			#          exit 0
+			#      else
+			#          echo "$0": Failed to install $TOOL >&2
+			#          exit 1
+			#      fi
+
+			ar)
+				PACKAGE=binutils
+				;;
+
+			iconv)
+				PACKAGE=libc-bin
+				;;
+
+			lsblk)
+				PACKAGE=util-linux
+				;;
+
+			pacstrap)
+				PACKAGE=arch-install-scripts
+				;;
+
+			sbsign|sbverify)
+				PACKAGE=sbsigntool
+				;;
+
+			sha256sum|sort)
+				PACKAGE=coreutils
+				;;
+
+			xz)
+				PACKAGE=xz-utils
+				;;
+
+			*)
+				PACKAGE="$TOOL"
+				;;
+
+		esac
+		apt install -y "$PACKAGE" > /dev/null 2>&1
+		if test $? '!=' 0; then
+			echo "$0": Failed to ensure "'"$TOOL"'" installed. >&2
+			exit 1
+		fi
+		;;
+
+        ################################################# ensures
+
 	################################################# Detect Installation
 
 	detect-installed)
@@ -1269,96 +1359,6 @@ SOURCES_LIST
 		done
 		exit 0
 		;;
-
-        ################################################# ensures
-
-	# TODO: Adapt to the system's package manager.
-	ensure)
-		if test X${2+set} '!=' Xset; then
-			echo "$0": require TOOL argument >&2
-			exit 1
-		fi
-		TOOL="$2"
-		if which "$TOOL" > /dev/null 2>&1; then
-			# Already installed.
-			exit 0
-		fi
-		# TODO: figure out the system's package manager
-		exec "$0" ensure-apt "$TOOL"
-		;;
-
-	ensure-apt)
-		if test X${2+set} '!=' Xset; then
-			echo "$0": require TOOL argument >&2
-			exit 1
-		fi
-		TOOL="$2"
-		case "$TOOL" in
-			# Add special cases here where
-			# the tool name is not the same
-			# as the package name.
-			# Note that various distros might
-			# have different package namings
-			# too.... SIGH
-			# Worse, some distros might put
-			# some tools together, that other
-			# distros keep in separate packages.
-			# This is why 'ensure' names tools
-			# and not packages.
-
-			# For tools whose package has
-			# different names depending on
-			# distro, we could do:
-			#      apt -y distro1-package > /dev/null 2>&1
-			#      apt -y package-distro2 > /dev/null 2>&1
-			#      if which "$TOOL" > /dev/null 2>&1; then
-			#          exit 0
-			#      else
-			#          echo "$0": Failed to install $TOOL >&2
-			#          exit 1
-			#      fi
-
-			ar)
-				PACKAGE=binutils
-				;;
-
-			iconv)
-				PACKAGE=libc-bin
-				;;
-
-			lsblk)
-				PACKAGE=util-linux
-				;;
-
-			pacstrap)
-				PACKAGE=arch-install-scripts
-				;;
-
-			sbsign|sbverify)
-				PACKAGE=sbsigntool
-				;;
-
-			sha256sum|sort)
-				PACKAGE=coreutils
-				;;
-
-			xz)
-				PACKAGE=xz-utils
-				;;
-
-			*)
-				PACKAGE="$TOOL"
-				;;
-
-		esac
-		apt install -y "$PACKAGE" > /dev/null 2>&1
-		if test $? '!=' 0; then
-			echo "$0": Failed to ensure "'"$TOOL"'" installed. >&2
-			exit 1
-		fi
-		;;
-
-        ################################################# ensures
 
 	select-vdev)
 		printf 'single\nmirror\nraidz1\nraidz2\nraidz3\n' | fzf --layout=reverse-list --no-sort --no-input --border --border-label='Select ZFS Pool Type' --preview="$0"' preview-vdev {}'
