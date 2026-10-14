@@ -1,0 +1,1635 @@
+#! /bin/sh
+
+# Copyright 2026 raid5atemyhomework
+#
+# Permission is hereby granted, free of charge, to any person
+# obtaining a copy of this software and associated documentation
+# files (the “Software”), to deal in the Software without
+# restriction, including without limitation the rights to use,
+# copy, modify, merge, publish, distribute, sublicense, and/or
+# sell copies of the Software, and to permit persons to whom the
+# Software is furnished to do so, subject to the following
+# conditions:
+#
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+# OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+# WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+# OTHER DEALINGS IN THE SOFTWARE.
+
+################################################################
+
+#
+
+# LLMs were not involved in the creation or review of any part
+# of the code.
+# Please respect this and do not involve LLMs in any way to create
+# modifications of, or reviews of, this code, and do not train
+# any LLMs with this code.
+# This request is not a legal binding and is not part of the
+# copyright license terms, but only an asshole would disrespect
+# it; are you an asshole?
+
+#
+
+VERSION=1.0.0
+
+# Convenient names.
+# These are NOT intended to be modifiable.
+
+WORKDIR="/zfsbootmenu-installer-work"
+TANK_NAME=zroot
+
+# For best portability, we assume shell functions are not supported.
+# For code organization purposes, the case $1 below is effectively
+# our "shell functions", and has the advantage that we can easily
+# invoke them from the command line for development testing.
+
+if test X${1+set} '=' Xset; then
+	case $1 in
+	--help|-h)
+		cat <<HELP
+[sudo] zfsbootmenu-installer
+
+   Launches an interactive wizard for ZFSBootMenu
+   installation and creation of a ZFS pool, and
+   installs a supported distro as the first Boot
+   Environment.
+
+   If you are already in a ZFSBootMenu setup with a
+   ZFS pool, you can add a new Boot Environment with
+   an install of a supported distro, or prepare new
+   disks to add or replace into your array.
+
+   This command must be run as root.
+   When initially installing, you should use an Ubuntu
+   Live CD or rescue disk, or a similar Debian
+   derivative with a ZFS kernel.
+   Boot Environments installed by this tool will also
+   have this tool (and its dependencies) installed so
+   that you can add alternate Boot Environments,
+   regardless of the distro in that Boot Environment.
+
+zfsbootmenu-installer --help
+
+   Display this help
+
+zfsbootmenu-installer --version
+
+   Display the version
+
+zfsbootmenu-installer <command> <args>....
+
+   Run an internal part of this tool; this is not
+   intended for end-users.
+
+Send bug reports to raid5atemyhomework@protonmail.com
+This tool is released under an MIT license.
+HELP
+		exit 0
+		;;
+	--version|-v)
+		cat <<VERSION
+zfsbootmenu-installer ${VERSION}
+Copyright 2026 raid5atemyhomework
+This tool is released under an MIT license.
+VERSION
+		exit 0
+		;;
+
+	preview-mainmenu)
+		case $2 in
+			Initialize)
+				cat <<DESC
+Format one or more block devices, install ZFSBootMenu
+bootloader on all of them with Secure Boot support, and
+create a ZFS Pool '${TANK_NAME}' from them, then install
+one supported distro:
+
+DESC
+				"$0" distro list
+				;;
+
+			AddBootEnvironment)
+				cat <<DESC
+Add a Boot Environment to an existing ZFS Pool named
+'${TANK_NAME}' with a '${TANK_NAME}/ROOT' dataset, installing
+one supported distro:
+
+DESC
+				"$0" distro list
+				;;
+
+			ChangeDefaultBoot)
+				cat <<DESC
+Change the Boot Environment that ZFSBootMenu will default
+to booting the machine into.
+DESC
+				;;
+
+			ReflashESP)
+				cat <<DESC
+Re-download ZFSBootMenu and install it into the EFI
+System Partition of a block device.
+DESC
+				;;
+
+			PrepareNewDisk)
+				cat <<DESC
+Format a block device, creating an EFI System Partition
+on it, and re-download and install ZFSBootMenu on it.
+
+Use this to prepare a device before adding it to your
+ZFS Pool array to replace a broken device or to
+increase the pool's capacity.
+DESC
+				;;
+
+			Exit)
+				cat <<DESC
+Exit this tool.
+DESC
+				;;
+
+			About)
+				cat <<DESC
+'zfsbootmenu-installer' is a tool to set up a ZFS
+array and install a bootable GNU/Linux distro on
+it, with the root as a dataset on the ZFS array
+and '/home' as a separate ZFS dataset.
+
+ZFSBootMenu is used as the bootloader, and the
+installed system can be run with Secure Boot.
+
+After initializing your system with 'Initialize',
+'zfsbootmenu-installer' will also install itself
+in '/usr/local/bin'.
+You can then use it to install additional
+GNU/Linux distros on the same ZFS array (sharing
+the same '/home', and allowing you to multi-boot
+between them), select the default distro to boot,
+or prepare new disks to add or replace into your
+array.
+DESC
+				;;
+
+		esac
+		exit 0
+		;;
+
+	mkdir-p)
+		DIRNAME="$2"
+		mkdir -p "$DIRNAME" || exit 1
+		if test -d "$DIRNAME"; then :; else
+			echo "$0": Unable to create "'$DIRNAME'" >&2
+			exit 1
+		fi
+		exit 0
+		;;
+
+	################################################# Detect Installation
+
+	detect-installed)
+		if test '!' '(' -d /usr/local/mok -a \
+				-f /usr/local/mok/MOK.priv -a \
+				-f /usr/local/mok/MOK.pem -a \
+				-f /usr/local/mok/MOK.der -a \
+				-f /usr/local/username -a \
+				-f /etc/zfs/zroot.key \
+				')'; then
+			exit 1
+		fi
+		if which zpool > /dev/null 2>&1; then :; else
+			exit 1
+		fi
+		if zpool list "$TANK_NAME" > /dev/null 2>&1; then :; else
+			exit 1
+		fi
+		exit 0
+		;;
+
+	################################################# Detect Installation
+
+	################################################# MOK creation
+
+	create-mok-inner)
+		if test X${3+set} '!=' Xset; then
+			echo "$0": Need HOSTNAME DIR arguments >&2
+			exit 1
+		fi
+		HOSTNAME="$2"
+		DIR="$3"
+
+		"$0" mkdir-p "$DIR" || exit 1
+		rm -rf "$DIR"/* > /dev/null 2>&1
+
+		echo "---- zfsbootmenu-installer: Create Machine Owner Key (MOK)"
+		cat > "$DIR"/openssl.cnf <<CFG
+HOME = $DIR
+RANDFILE = $DIR/.rnd
+CFG
+		if test '!' -f "$DIR"/openssl.cnf; then
+			exit 1
+		fi
+		# suppress scary-looking error message.
+		# Modern OSs should have a good secure CSPRNG
+		# already, and also save and load the
+		# entropy for that CSPRNG during startup.
+		openssl rand -out "$DIR"/.rnd 1024
+		EXIT_CODE=$?
+		if test $EXIT_CODE '!=' 0; then
+			exit $EXIT_CODE
+		fi
+		# mokutil and kmodsign use DER
+		openssl req -config "$DIR"/openssl.cnf \
+			-new -x509 -newkey rsa:2048 -nodes -days 36500 \
+			-subj "/CN=${HOSTNAME} Machine Owner Key" \
+			-keyout "$DIR"/MOK.priv \
+			-outform DER -out "$DIR"/MOK.der
+		EXIT_CODE=$?
+		if test $EXIT_CODE '!=' 0; then
+			exit $EXIT_CODE
+		fi
+		# sbsign uses PEM
+		openssl x509 -inform DER -in "$DIR"/MOK.der -outform PEM -out "$DIR"/MOK.pem
+		EXIT_CODE=$?
+		if test $EXIT_CODE '!=' 0; then
+			exit $EXIT_CODE
+		fi
+		# clean up
+		rm -f "$DIR"/openssl.cnf > /dev/null 2>&1
+		exit 0
+		;;
+
+	create-mok)
+		if test -e /usr/local/mok/MOK.priv; then
+			echo "$0": MOK /usr/local/mok/MOK.priv already exists. >&2
+			exit 1
+		fi
+		exec "$0" create-mok-inner "`hostname`" /usr/local/mok
+		;;
+
+	################################################# MOK creation
+
+	################################################# ZFSBootMenu Download
+
+	# Downloads the latest ZFSBootMenu file and validates it
+	# against the hardcoded key.
+	download-validate-zbm)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": Need DIR argument >&2
+			exit 1
+		fi
+		DIR="$2"
+
+		echo "---- zfsbootmenu-installer: Download and validate ZFSBootMenu"
+
+		rm -rf "$DIR"/* > /dev/null 2>&1
+		"$0" ensure wget || exit 1
+		SIGNIFY=`"$0" detect-signify "$DIR"`
+		if test $? '!=' 0; then
+			echo "$0": Unable to find signify tool >&2
+			exit 1
+		fi
+		rm -rf "$DIR"/* > /dev/null 2>&1
+
+		cd "$DIR" || exit 1
+		# After this point, we cannot invoke other sub-commands
+		# of zfsbootmenu-installer
+
+		cat > zfsbootmenu.pub <<PUB
+untrusted comment: ZFSBootMenu signing key public key
+RWSUawlGznCLF8NxEb1EyrGpP2eIR9l7JIZgLzCdv+64uBDvfXNJm+cF
+PUB
+
+		wget --no-verbose --content-disposition https://get.zfsbootmenu.org/efi/recovery || exit 1
+		wget --no-verbose --content-disposition https://get.zfsbootmenu.org/sha256.sig || exit 1
+		if ${SIGNIFY} -C -p zfsbootmenu.pub -x sha256.sig *.EFI; then
+			mv *.EFI zbm-unsigned.efi
+		else
+			echo "$0": ZFSBootMenu failed validation >&2
+			exit 1
+		fi
+		# Clean up
+		rm -f sha256.sig zfsbootmenu.pub > /dev/null 2>&1
+		exit 0
+		;;
+
+	# ZFSBootMenu devs use signify, but the problem is
+	# that on Debian derivatives, the tool used is called
+	# `signify-openbsd` and the `signify` package is
+	# something completely different.  SIGH.
+	# This part detects which one to use, or tries
+	# apt install `signify-openbsd` if neither is
+	# found.
+	detect-signify)
+		TMPDIR="$2"
+		for SIGNIFY in signify-openbsd signify; do
+			if which ${SIGNIFY} > /dev/null 2>&1; then
+				# Try creating a dummy keypair
+				${SIGNIFY} -G -n -p "$TMPDIR"/zfsbootmenu-installer-dummy.pub -s "$TMPDIR"/zfsbootmenu-installer-dummy.sec > /dev/null 2>&1
+				if test $? '=' 0 && test -f "$TMPDIR"/zfsbootmenu-installer-dummy.pub; then
+					rm -rf "$TMPDIR"/zfsbootmenu-installer-dummy.pub "$TMPDIR"/zfsbootmenu-installer-dummy.sec > /dev/null 2>&1
+					echo ${SIGNIFY}
+					exit 0
+				fi
+				rm -rf "$TMPDIR"/zfsbootmenu-installer-dummy.pub "$TMPDIR"/zfsbootmenu-installer-dummy.sec > /dev/null 2>&1
+			fi
+		done
+		apt install signify-openbsd > /dev/null 2>&1
+		if test $? '=' 0; then
+			echo signify-openbsd
+			exit 0
+		fi
+		exit 1
+		;;
+
+	################################################# ZFSBootMenu Download
+
+	################################################# shim-signed Download
+
+	# Get shim-signed from the Ubuntu package.
+	# Why Ubuntu's and not, say, Fedora's or
+	# Debian's?
+	# Because shim hardcodes some additional keys
+	# during build time, and each distro will
+	# include their own pubkeys for their own
+	# version of shim(-signed).
+	# If the distro we are installing is dependent
+	# on using DKMS for OpenZFS, then all we need
+	# is to configure DKMS to always sign with our
+	# MOK (which we do, see dkms-mok-auto-sign),
+	# so it doesn't matter whose keys are hardcoded
+	# into shim.
+	# Even for the distros where we compile OpenZFS,
+	# the kernel module is generally set up to
+	# compile with DKMS, so we still trigger sign
+	# it with our own MOK.
+	# However, Ubuntu does not use DKMS for its
+	# OpenZFS; instead, it distributes the binary
+	# directly, though the binary *is* signed by
+	# Canonical.
+	# Thus, we want the Canonical pubkeys in the
+	# shim we use so that it passes the shim
+	# hardcoded pubkey; for non-Ubuntu distros, we
+	# will rely on DKMS to sign with our MOK so
+	# that it also passes.
+	download-validate-shim)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": Need DIR argument >&2
+			exit 1
+		fi
+		DIR="$2"
+
+		# Hardcoded.
+		# As Ubuntu will eventually replace these, we
+		# need to update it from:
+		# https://archive.ubuntu.com/ubuntu/dists/*/main/binary-amd64/Packages.xz
+		# Package: shim-signed
+		SHIM_DEB="https://archive.ubuntu.com/ubuntu/pool/main/s/shim-signed/shim-signed_1.59+15.8-0ubuntu2_amd64.deb"
+		SHIM_SHA256="f8ed71ce2d91a304b6d5eb84997f846f331b554578bc02dbfe78e13ad8ac81a9"
+
+		echo "---- zfsbootmenu-installer: Download and validate shim-signed"
+		rm -rf "$DIR"/* > /dev/null 2>&1
+		"$0" ensure wget || exit 1
+		"$0" ensure sha256sum || exit 1
+		"$0" ensure ar || exit 1
+		"$0" ensure xz || exit 1
+		"$0" ensure tar || exit 1
+
+		cd "$DIR"
+
+		wget --no-verbose -O shim.deb "$SHIM_DEB" || exit 1
+		echo $SHIM_SHA256 shim.deb | sha256sum -c
+		if test $? '!=' 0; then
+			echo "$0": shim-signed .deb validation failed >&2
+			exit 1
+		fi
+		# Extract from shim-signed
+		ar x shim.deb data.tar.xz || exit 1
+		xz --decompress data.tar.xz || exit 1
+		tar xf data.tar || exit 1
+		rm data.tar
+		# Move the files.
+		mv ./usr/lib/shim/shimx64.efi.signed.latest ./shimx64.efi || exit 1
+		mv ./usr/lib/shim/mmx64.efi ./mmx64.efi || exit 1
+		mv ./usr/lib/shim/fbx64.efi ./fbx64.efi || exit 1
+		# Clean up
+		rm -rf usr etc var shim.deb > /dev/null 2>&1
+		exit 0
+		;;
+
+	################################################# shim-signed Download
+
+	################################################# Prepare a reference ESP
+
+	print-boot-csv)
+		"$0" ensure iconv
+		iconv -t UCS-2 << BOOTCSV
+shimx64.efi,ZFSBootMenu,,This is the boot entry for ZFSBootMenu
+BOOTCSV
+		;;
+
+	prepare-esp)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": Need DIR argument >&2
+			exit 1
+		fi
+		DIR="$2"
+		# Needs access to MOK privkey, which should
+		# be readable only to root.
+		if test X${EUID:-$(id -u)} '!=' X0; then
+			echo "$0": not running as superuser, aborting >&2
+			exit 1
+		fi
+
+		# Look for MOK signing key.
+		# Prefer the working dir path.
+		if test -d ${WORKDIR}/config/mok; then
+			KEYDIR=${WORKDIR}/config/mok
+		elif test -d /usr/local/mok; then
+			KEYDIR=/usr/local/mok
+		else
+			echo "$0": Cannot find MOK >&2
+			exit 1
+		fi
+
+		echo "---- zfsbootmenu-installer: Prepare ESP"
+		"$0" ensure sbsign
+		rm -rf "$DIR"/* > /dev/null 2>&1
+		"$0" mkdir-p "$DIR"/BOOT || exit 1
+		"$0" mkdir-p "$DIR"/ZFSBootMenu || exit 1
+		"$0" mkdir-p "$DIR"/EFI || exit 1
+		"$0" download-validate-shim "$DIR"/BOOT || exit 1
+		"$0" download-validate-zbm "$DIR"/ZFSBootMenu || exit 1
+
+		echo "---- zfsbootmenu-installer: Sign ZFSBootMenu"
+		sbsign --key "$KEYDIR"/MOK.priv --cert "$KEYDIR"/MOK.pem "$DIR"/ZFSBootMenu/zbm-unsigned.efi --output "$DIR"/ZFSBootMenu/grubx64.efi
+
+		cat > "$DIR"/ZFSBootMenu/README.txt <<README
+The file named 'grubx64.efi' is ***NOT*** Grub.
+It is ZFSBootMenu, signed with the Machine Owner Key.
+The filename 'grubx64.efi' is used because the Shim
+bootloader hardcodes that filename.
+This system does not use Grub and will not work with
+Grub configurations and scripts.
+README
+
+		# Copy and move files around.
+		cp "$KEYDIR"/MOK.der "$DIR"/EFI/MOK.cer
+		cp "$DIR"/BOOT/shimx64.efi "$DIR"/ZFSBootMenu/shimx64.efi
+		cp "$DIR"/BOOT/mmx64.efi "$DIR"/ZFSBootMenu/mmx64.efi
+		mv "$DIR"/BOOT/shimx64.efi "$DIR"/BOOT/BOOTX64.EFI
+		"$0" print-boot-csv > "$DIR"/ZFSBootMenu/BOOTX64.CSV
+		mv "$DIR"/BOOT "$DIR"/ZFSBootMenu "$DIR"/EFI
+
+		echo "---- zfsbootmenu-installer: ESP prepared"
+		exit 0
+		;;
+
+	################################################# Prepare a reference ESP
+
+	################################################# distro
+
+	select-distro)
+		if test X${2+set} '=' Xset; then
+			comment=' ('"$2"')'
+		else
+			comment=
+		fi
+		"$0" distro list | fzf --layout=reverse-list --no-sort --no-input --border --border-label='Select Distro'"$comment" --preview="$0"' distro preview {}'
+		exit 0
+		;;
+
+	# Supported distro code
+	distro)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": requires SUBCOMMAND argument >&2
+			exit 1
+		fi
+		SUBCOMMAND="$2"
+		if test X"$SUBCOMMAND" '=' Xlist; then
+			# This has to be updated in two
+			# places: here, and in the
+			# 'case "$DISTRO"'
+			# Distro names must follow the
+			# ZFS naming restrictions for
+			# datasets: [A-Za-z0-9][-_:.A-Za-z0-9]*
+			cat <<DISTROS
+Ubuntu26.04
+KUbuntu26.04
+Debian13
+DISTROS
+			exit 0
+		fi
+		if test X${3+set} '!=' Xset; then
+			echo "$0": requires SUBCOMMAND DISTRO arguments >&2
+			exit 1
+		fi
+		DISTRO="$3"
+		case "$SUBCOMMAND" in
+			# For install-outside sub-command, $4 is the path.
+			install-outside)
+				if test X${4+set} '!=' Xset; then
+					echo "$0": requires SUBCOMMAND DISTRO DIR arguments >&2
+					exit 1
+				fi
+				DIR="$4"
+				;;
+
+			# check: Just check that the distro name is
+			# valid
+			# preview: output a description of the distro.
+			# install-outside: Initialize the distro's
+			# root files into the specified directory $4,
+			# while still in the hosting OS env.
+			# At minimum this should include /bin/sh.
+			# install-chroot: Continue initializing the
+			# distro, but now chrooted inside the BE.
+			check|preview|install-chroot)
+				:
+				;;
+
+			# For install-chroot, the outer driver has
+			# created the files:
+			#
+			#     /usr/local/bin/zfsbootmenu-installer <- this file
+			#     /usr/local/mok/MOK.priv <- MOK private key
+			#     /usr/local/mok/MOK.pem <- MOK public key PEM format
+			#     /usr/local/mok/MOK.der <- MOK public key DER format
+			#     /usr/local/username <- username for UID 1000
+			#     /etc/zfs/zroot.key <- passphrase for pool and user
+			#     /etc/hostname <- hostname
+			#     /etc/hosts <- modified to append the hostname and map it to 127.0.0.1
+			#     /etc/hostid <- random hostid for this machine
+			#
+			# The above files are created after install-outside
+			# has been run.
+
+			*)
+				echo "$0": Unknown distro sub-command: $SUBCOMMAND >&2
+				exit 1
+				;;
+
+		esac
+		# We define our supported distros below.
+		# If we add or remove a distro, we should update
+		# the list above also.
+		case "$DISTRO" in
+			Ubuntu26.04)
+				case "$SUBCOMMAND" in
+					preview)
+						cat <<DESC
+Ubuntu 26.04 Resolute Raccoon
+
+Ubuntu is the Debian derivative created by Canonical, Ltd.
+
+Installed with Ubuntu Desktop, which is Gnome Shell 50
+with Canonical-branded extensions.
+DESC
+						;;
+
+					install-outside)
+						echo "---- zfsbootmenu-installer: Installing Ubuntu26.04"
+						"$0" ensure debootstrap && debootstrap resolute "$DIR"
+						exit $?
+						;;
+
+					install-chroot)
+						echo "---- zfsbootmenu-installer: Installing Ubuntu26.04 (in chroot)"
+						"$0" ubuntu-install-chroot-common resolute && \
+						apt install -y ubuntu-desktop && \
+						snap install firefox
+						EXIT_CODE=$?
+						if test $EXIT_CODE '!=' 0; then
+							exit $EXIT_CODE
+						fi
+						exec "$0" typical-enable-auto-login
+						;;
+
+				esac
+				;;
+
+			KUbuntu26.04)
+				case "$SUBCOMMAND" in
+					preview)
+						cat <<DESC
+KUbuntu 26.04 Resolute Raccoon
+
+Ubuntu is the Debian derivative created by Canonical, Ltd.
+KUbuntu is the Ubuntu flavor that comes with KDE Plasma
+instead of the Canonical-branded Ubuntu Desktop.
+
+Installed with KDE Plasma.
+DESC
+						;;
+
+					install-outside)
+						echo "---- zfsbootmenu-installer: Installing KUbuntu26.04"
+						"$0" ensure debootstrap && debootstrap resolute "$DIR"
+						exit $?
+						;;
+
+					install-chroot)
+						echo "---- zfsbootmenu-installer: Installing KUbuntu26.04 (in chroot)"
+						"$0" ubuntu-install-chroot-common resolute
+						EXIT_CODE=$?
+						if test $EXIT_CODE '!=' 0; then
+							exit $EXIT_CODE
+						fi
+						echo sddm shared/default-x-display-manager select sddm | debconf-set-selections
+						apt install -y kubuntu-desktop && \
+						snap install firefox
+						EXIT_CODE=$?
+						if test $EXIT_CODE '!=' 0; then
+							exit $EXIT_CODE
+						fi
+						exec "$0" typical-enable-auto-login
+						;;
+
+				esac
+				;;
+
+			Debian13)
+				case "$SUBCOMMAND" in
+					preview)
+						cat <<DESC
+Debian 13 Trixie
+
+Debian is one of the most successful GNU/Linux
+distributions.
+
+Debian 'tasksel' will be launched during
+installation to let you select desktop
+environments and services.
+DESC
+						;;
+
+					install-outside)
+						echo "---- zfsbootmenu-installer: Installing Debian13"
+						"$0" ensure debootstrap && debootstrap trixie "$DIR"
+						exit $?
+						;;
+
+					install-chroot)
+						echo "---- zfsbootmenu-installer: Installing Debian13 (in chroot)"
+						exec "$0" debian-install-chroot trixie
+						;;
+
+				esac
+				;;
+
+			# Unrecognized distro name
+			*)
+				echo "$0": Unknown distro name: $3 >&2
+				exit 1
+				;;
+
+		esac
+		exit 0
+		;;
+
+	debian-derivative-override-mok)
+		echo "---- zfsbootmenu-installer: debian derivative: Overriding distro MOKs"
+		# Ubuntu creates these /var/lib/shim-signed/mok/MOK.priv and MOK.der
+		"$0" mkdir-p /var/lib/shim-signed/mok || exit 1
+		cp --reflink=auto /usr/local/mok/MOK.priv /var/lib/shim-signed/mok/MOK.priv
+		cp --reflink=auto /usr/local/mok/MOK.der /var/lib/shim-signed/mok/MOK.der
+		chmod 600 /var/lib/shim-signed/mok/MOK.priv
+		# Debian creates these /var/lib/dkms/mok.key and mok.pub
+		"$0" mkdir-p /var/lib/dkms || exit 1
+		cp --reflink=auto /usr/local/mok/MOK.priv /var/lib/dkms/mok.key
+		cp --reflink=auto /usr/local/mok/MOK.der /var/lib/dkms/mok.pub
+		chmod 600 /var/lib/dkms/mok.key
+		exit 0
+		;;
+
+	# Sets up DKMS to sign with the MOK.
+	# This is technically incomplete --- the distribution
+	# might include closed-source (or even open-source, but
+	# precompiled) kernel modules that are not signed by
+	# Microsoft or Canonical (sometimes called `kmod`, but
+	# `kmod` is a tool that inserts and removes kernel
+	# modules from the running kernel...), and those have
+	# to be signed by the MOK.
+	# No idea how to automate *those*, maybe hack into
+	# apt hooks?
+	dkms-mok-auto-sign)
+		echo "---- zfsbootmenu-installer: DKMS: setup kernel module autosign"
+		"$0" mkdir-p /etc/dkms/framework.conf.d || exit 1
+		cat > /etc/dkms/framework.conf.d/00-0-sign-with-mok.conf <<FILE
+mok_signing_key=/usr/local/mok/MOK.priv
+mok_certificate=/usr/local/mok/MOK.der
+FILE
+		if test -f /etc/dkms/framework.conf.d/00-0-sign-with-mok.conf; then
+			exit 0
+		else
+			exit 1
+		fi
+		;;
+
+	print-sign-kernel-script)
+		cat <<SCRIPT
+#! /bin/sh
+
+MOK_PRIV="/usr/local/mok/MOK.priv"
+MOK_PUB="/usr/local/mok/MOK.pem"
+
+if test X\${2+set} '!=' Xset; then
+	echo "\$0": Unexpected number of arguments >&2
+	exit 1
+fi
+
+KERNEL="\$2"
+
+exec sbsign --key "\$MOK_PRIV" --cert "\$MOK_PUB" "\$KERNEL" --output "\$KERNEL"
+SCRIPT
+		exit 0
+		;;
+
+	debian-derivative-auto-sign-kernel)
+		echo "---- zfsbootmenu-installer: debian derivative: setup kernel autosign"
+		"$0" mkdir-p /etc/kernel/postinst.d || exit 1
+		"$0" print-sign-kernel-script > /etc/kernel/postinst.d/00-0-sign-with-mok
+		if test '!' -f /etc/kernel/postinst.d/00-0-sign-with-mok; then
+			echo "$0": Unable to create automated kernel signing >&2
+			exit 1
+		fi
+		chmod 755 /etc/kernel/postinst.d/00-0-sign-kernel
+		exit 0
+		;;
+
+	debian-derivative-prepare)
+		echo "---- zfsbootmenu-installer: debian derivative: Preparing signing capabilities."
+		"$0" debian-derivative-override-mok && \
+		"$0" dkms-mok-auto-sign && \
+		apt update && \
+		apt install -y --no-install-recommends sbsigntool && \
+		"$0" debian-derivative-auto-sign-kernel
+		exit $?
+		;;
+
+	debian-derivative-install-chroot-basics)
+		echo "---- zfsbootmenu-installer: debian derivative: Installing basics."
+		apt update && apt upgrade -y && \
+		apt install -y \
+			keyboard-configuration locales tzdata console-setup \
+			sudo debconf
+		EXIT_CODE=$?
+		if test X$EXIT_CODE '!=' X0; then
+			exit $EXIT_CODE
+		fi
+		# We explicitly generate en_US.UTF-8 via
+		# locale-gen as many tools assume it exists.
+		locale-gen en_US.UTF-8
+		:
+		exec dpkg-reconfigure keyboard-configuration locales tzdata console-setup
+		;;
+
+	debian-derivative-install-chroot-more)
+		echo "---- zfsbootmenu-installer: debian derivative: Installing additional."
+		if test -f /usr/share/systemd/tmp.mount; then
+			cp /usr/share/systemd/tmp.mount /etc/systemd/system
+			systemctl enable tmp.mount || exit 1
+		fi
+		apt install -y \
+			vim bash-completion command-not-found \
+			dkms mokutil signify-openbsd fzf libc-bin \
+			wget util-linux coreutils binutils xz-utils tar
+		exit $?
+		;;
+
+	debian-derivative-install-chroot-zfs-support)
+		echo "---- zfsbootmenu-installer: debian derivative: Install ZFS support."
+		# zfs-auto-snapshot is a MAJOR unlock.
+		exec apt install -y \
+			zfs-initramfs zfsutils-linux zfs-auto-snapshot
+		;;
+
+	debian-derivative-install-chroot-zfs-config)
+		echo "---- zfsbootmenu-installer: debian derivative: Enable ZFS on systemd."
+		# The ZFSBootMenu guides do not include the scrub
+		# and trim timers but those make 100% sense to
+		# enable.
+		systemctl enable zfs.target && \
+		systemctl enable zfs-import-cache && \
+		systemctl enable zfs-mount && \
+		systemctl enable zfs-import.target && \
+		systemctl enable zfs-volume-wait && \
+		systemctl enable zfs-volumes.target && \
+		systemctl enable zfs-scrub-monthly@${TANK_NAME}.timer && \
+		systemctl enable zfs-trim-monthly@${TANK_NAME}.timer && \
+		"$0" mkdir-p /etc/initramfs-tools/conf.d
+		EXIT_CODE=$?
+		if test $EXIT_CODE '!=' 0; then
+			exit $EXIT_CODE
+		fi
+		echo "UMASK=077" > /etc/initramfs-tools/conf.d/umask.conf
+		exec update-initramfs -c -k all
+		;;
+
+	debian-derivative-install-chroot-make-user)
+		USERNAME="`cat /usr/local/username`"
+		echo "---- zfsbootmenu-installer: debian derivative: create user ${USERNAME}."
+		addgroup --system lpadmin && \
+		addgroup --system lxd && \
+		addgroup --system sambashare && \
+		adduser --uid 1000 --disabled-password --comment "${USERNAME}" "${USERNAME}"
+		EXIT_CODE=$?
+		if test X$EXIT_CODE '!=' X0; then
+			exit $EXIT_CODE
+		fi
+		zfs mount $TANK_NAME/home
+		# If it already exists, don't mess with it!
+		if test -d /home/"${USERNAME}"; then :; else
+			cp -a /etc/skel /home/"${USERNAME}"
+			if test '!' -d /home/"${USERNAME}"; then
+				echo "$0": Failed to create user homedir >&2
+				exit 1
+			fi
+			chown -R "${USERNAME}":"${USERNAME}" /home/"${USERNAME}"
+		fi
+		# usermod seems missing on Trixie installs.
+		for GROUP in adm cdrom dip lpadmin lxd plugdev sambashare sudo; do
+			adduser "${USERNAME}" "${GROUP}"
+			EXIT_CODE=$?
+			if test X$EXIT_CODE '!=' X0; then
+				echo "$0": Could not add user $USERNAME to $GROUP >&2
+				exit $EXIT_CODE
+			fi
+		done
+		echo "${USERNAME} ALL=(ALL) NOPASSWD: ALL" >/etc/sudoers.d/"${USERNAME}"
+		chown root:root /etc/sudoers.d/"${USERNAME}"
+		chmod 400 /etc/sudoers.d/"${USERNAME}"
+		( printf '%s:' "${USERNAME}" && cat /etc/zfs/zroot.key ) | chpasswd
+		exit 0
+		;;
+
+	# Typical GNU/Linux systems
+
+	typical-enable-auto-login)
+		USERNAME="`cat /usr/local/username`"
+		for GDM_DIR in /etc/gdm3 /etc/gdm; do
+			if test -d "$GDM_DIR"; then
+				for GDM_CNF in custom.conf daemon.conf; do
+					if test -f "$GDM_DIR"/"$GDM_CNF"; then
+						"$0" typical-gdm3-enable-auto-login "$GDM_DIR"/"$GDM_CNF" "$USERNAME"
+					fi
+				done
+			fi
+		done
+		if which sddm > /dev/null 2>&1; then
+			"$0" typical-sddm-enable-auto-login /etc/sddm.conf.d "$USERNAME"
+		fi
+		# TODO LightDM
+		exit 0
+		;;
+
+	typical-gdm3-enable-auto-login)
+		if test X${3+set} '!=' Xset; then
+			echo "$0": requires FILE USERNAME >&2
+			exit 1
+		fi
+		FILE="$2"
+		USERNAME="$3"
+		echo "---- zfsbootmenu-installer: typical: Enable GDM3 auto-login: $FILE"
+		"$0" ensure sed
+		# ***ERASE*** any existing AutomaticLogin settings
+		cat "$FILE" | \
+			sed -e 's@^[ 	]*AutomaticLoginEnable[ 	]*=.*$@@' | \
+			sed -e 's@^[ 	]*AutomaticLogin[ 	]*=.*$@@' > .gdm3.custom.conf
+		mv .gdm3.custom.conf "$FILE"
+		# Append to the end.
+		cat >> $FILE <<SETTINGS
+[daemon]
+AutomaticLoginEnable=true
+AutomaticLogin=$USERNAME
+SETTINGS
+		exit 0
+		;;
+
+	typical-sddm-enable-auto-login)
+		if test X${3+set} '!=' Xset; then
+			echo "$0": requires DIR USERNAME >&2
+			exit 1
+		fi
+		DIR="$2"
+		USERNAME="$3"
+		echo "---- zfsbootmenu-installer: typical: Enable SDDM auto-login: $DIR"
+		"$0" mkdir-p "$DIR"
+		cat > "$DIR"/00-autologin.conf <<CONF
+[Autologin]
+Session=plasma
+User=$USERNAME
+CONF
+		exit 0
+		;;
+
+	# Ubuntu
+
+	ubuntu-sources-list)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": Need RELEASE_NAME argument >&2
+			exit 1
+		fi
+		RELEASE_NAME="$2"
+		"$0" mkdir-p /etc/apt || exit 1
+		cat > /etc/apt/sources.list <<SOURCES_LIST
+# Uncomment the deb-src entries if you need source packages
+
+deb http://archive.ubuntu.com/ubuntu/ $RELEASE_NAME main restricted universe multiverse
+# deb-src http://archive.ubuntu.com/ubuntu/ $RELEASE_NAME main restricted universe multiverse
+
+deb http://archive.ubuntu.com/ubuntu/ $RELEASE_NAME-updates main restricted universe multiverse
+# deb-src http://archive.ubuntu.com/ubuntu/ $RELEASE_NAME-updates main restricted universe multiverse
+
+deb http://archive.ubuntu.com/ubuntu/ $RELEASE_NAME-security main restricted universe multiverse
+# deb-src http://archive.ubuntu.com/ubuntu/ $RELEASE_NAME-security main restricted universe multiverse
+
+deb http://archive.ubuntu.com/ubuntu/ $RELEASE_NAME-backports main restricted universe multiverse
+# deb-src http://archive.ubuntu.com/ubuntu/ $RELEASE_NAME-backports main restricted universe multiverse
+SOURCES_LIST
+		;;
+
+	ubuntu-install-chroot-common)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": requires RELEASE arguments >&2
+			exit 1
+		fi
+		RELEASE="$2"
+		"$0" ubuntu-sources-list "$RELEASE" && \
+		"$0" debian-derivative-prepare && \
+		apt install -y --no-install-recommends linux-generic && \
+		"$0" debian-derivative-install-chroot-basics
+		EXIT_CODE=$?
+		if test $EXIT_CODE '!=' 0; then
+			exit $EXIT_CODE
+		fi
+		"$0" debian-derivative-install-chroot-more && \
+		"$0" debian-derivative-install-chroot-zfs-support && \
+		"$0" debian-derivative-install-chroot-zfs-config && \
+		"$0" debian-derivative-install-chroot-make-user && \
+		apt install -y ubuntu-standard
+		exit $?
+		;;
+
+	# Debian
+
+	debian-sources-list)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": Need RELEASE_NAME argument >&2
+			exit 1
+		fi
+		RELEASE_NAME="$2"
+		"$0" mkdir-p /etc/apt || exit 1
+		cat > /etc/apt/sources.list <<SOURCES_LIST
+# Uncomment the deb-src entries if you need source packages
+
+deb http://deb.debian.org/debian/ $RELEASE_NAME main contrib non-free-firmware
+# deb-src http://deb.debian.org/debian/ $RELEASE_NAME main contrib non-free-firmware
+
+deb http://security.debian.org/debian-security/ ${RELEASE_NAME}-security main contrib non-free-firmware
+# deb-src http://security.debian.org/debian-security/ ${RELEASE_NAME}-security main contrib non-free-firmware
+
+deb http://deb.debian.org/debian/ ${RELEASE_NAME}-updates main contrib non-free-firmware
+# deb-src http://deb.debian.org/debian/ ${RELEASE_NAME}-updates main contrib non-free-firmware
+
+deb http://deb.debian.org/debian/ ${RELEASE_NAME}-backports main contrib non-free-firmware
+# deb-src http://deb.debian.org/debian/ ${RELEASE_NAME}-backports main contrib non-free-firmware
+SOURCES_LIST
+		exit 0
+		;;
+
+	debian-install-chroot)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": requires RELEASE argument>&2
+			exit 1
+		fi
+		RELEASE="$2"
+		"$0" debian-sources-list "$RELEASE" && \
+		"$0" debian-derivative-prepare && \
+		apt install -y --no-install-recommends \
+			linux-headers-amd64 linux-image-amd64 \
+			zfs-initramfs && \
+		"$0" debian-derivative-install-chroot-basics
+		EXIT_CODE=$?
+		if test $EXIT_CODE '!=' 0; then
+			exit $EXIT_CODE
+		fi
+		"$0" debian-derivative-install-chroot-more && \
+		"$0" debian-derivative-install-chroot-zfs-support && \
+		"$0" debian-derivative-install-chroot-zfs-config && \
+		"$0" debian-derivative-install-chroot-make-user && \
+		apt install -y tasksel
+		EXIT_CODE=$?
+		if test $EXIT_CODE '!=' 0; then
+			exit $EXIT_CODE
+		fi
+		tasksel
+		"$0" typical-enable-auto-login
+		;;
+
+	################################################# distro
+
+        ################################################# install Boot Environment
+
+	check-distro-not-installed)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": requires DISTRO argument >&2
+			exit 1
+		fi
+		DISTRO="$2"
+		if zfs list $TANK_NAME/ROOT/"$DISTRO" > /dev/null 2>&1; then
+			echo "$0": Boot environment exists: $DISTRO >&2
+			echo "$0": If you want to force-reinstall it, destroy it first: >&2
+			echo "$0":'     'zfs destroy -R $TANK_NAME/ZROOT/$DISTRO >&2
+			exit 1
+		fi
+		exit 0
+		;;
+
+	# Used by AddBootEnvironment to set up
+	# $WORKDIR/config from an existing
+	# installation.
+	prepare-work-from-existing)
+		if "$0" detect-installed; then :; else
+			echo "$0": not on an existing zfsbootmenu-installer system >&2
+			exit 1
+		fi
+		"$0" mkdir-p ${WORKDIR}/config || exit 1
+		rm -rf ${WORKDIR}/config/* > /dev/null 2>&1
+		for FILE in /etc/hostid /etc/hostname /etc/zfs/zroot.key \
+				 /usr/local/mok /usr/local/username
+		do
+			DSTFILE=`echo "$FILE" | sed -e 's@\([^/]*\)$@ \1@' | sed -e 's@^[^ ]* @@'`
+			echo $DSTFILE
+			cp -R --reflink=auto $FILE ${WORKDIR}/config
+			if test '!' -e ${WORKDIR}/config/$DSTFILE; then
+				echo "$0": Failed to copy $FILE into workdir? >&2
+				exit 1
+			fi
+		done
+		exit 0
+		;;
+
+	# Introduce our config into the target.
+	copy-config-to-new-distro)
+		"$0" mkdir-p $WORKDIR/mnt/etc/zfs || exit 1
+		"$0" mkdir-p $WORKDIR/mnt/usr/local/bin || exit 1
+		"$0" mkdir-p $WORKDIR/mnt/usr/local/mok || exit 1
+		cp $WORKDIR/config/hostid $WORKDIR/mnt/etc/hostid && \
+		cp $WORKDIR/config/hostname $WORKDIR/mnt/etc/hostname && \
+		cp $WORKDIR/config/zroot.key $WORKDIR/mnt/etc/zfs/zroot.key && \
+		cp $WORKDIR/config/mok/MOK.priv $WORKDIR/mnt/usr/local/mok/MOK.priv && \
+		cp $WORKDIR/config/mok/MOK.der $WORKDIR/mnt/usr/local/mok/MOK.der && \
+		cp $WORKDIR/config/mok/MOK.pem $WORKDIR/mnt/usr/local/mok/MOK.pem && \
+		cp $WORKDIR/config/username $WORKDIR/mnt/usr/local/username &&
+		cp "$0" $WORKDIR/mnt/usr/local/bin/zfsbootmenu-installer
+		EXIT_CODE=$?
+		if test $EXIT_CODE '!=' 0; then
+			echo "$0": Failed to copy into new distro >&2
+			exit $EXIT_CODE
+		fi
+		# Add hostname to hosts.
+		printf '127.0.0.1 ' >> $WORKDIR/mnt/etc/hosts
+		cat $WORKDIR/config/hostname >> $WORKDIR/mnt/etc/hosts
+		echo >> $WORKDIR/mnt/etc/hosts
+		# Make sure all the permissions are aight
+		chmod 644 $WORKDIR/mnt/etc/hostid $WORKDIR/mnt/etc/hostname $WORKDIR/mnt/etc/hosts \
+			$WORKDIR/mnt/usr/local/mok/MOK.der $WORKDIR/mnt/usr/local/mok/MOK.pem \
+			$WORKDIR/mnt/usr/local/username && \
+		chmod 000 $WORKDIR/mnt/etc/zfs/zroot.key && \
+		chmod 600 $WORKDIR/mnt/usr/local/mok/MOK.priv && \
+		chmod 755 $WORKDIR/mnt/usr/local/bin/zfsbootmenu-installer
+		EXIT_CODE=$?
+		if test $EXIT_CODE '!=' 0; then
+			echo "$0": Failed to chmod files in new distro >&2
+			exit $EXIT_CODE
+		fi
+		exit 0
+		;;
+
+	# Mount the special devices into new distro.
+	mount-magic-to-new-distro)
+		mount -t proc proc $WORKDIR/mnt/proc && \
+		mount -t sysfs sys $WORKDIR/mnt/sys && \
+		mount -B /dev $WORKDIR/mnt/dev && \
+		mount -t devpts pts $WORKDIR/mnt/dev/pts
+		EXIT_CODE=$?
+		if test $EXIT_CODE '!=' 0; then
+			echo "$0": Failed to mount magic devices in new distro >&2
+			exit $EXIT_CODE
+		fi
+		exit 0
+		;;
+
+	# Install the given DISTRO into a new
+	# $TANK_NAME/ROOT/$DISTRO dataset,
+	# taking files from $WORKDIR/config
+	# This does not clean up the workdir,
+	# and does not unmount the dataset
+	# or change its mountpoint.
+	install-distro-core)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": requires DISTRO argument >&2
+			exit 1
+		fi
+		DISTRO="$2"
+		if "$0" distro check "$DISTRO"; then :; else
+			echo "$0": Unknown DISTRO: $DISTRO >&2
+			exit 1
+		fi
+		"$0" check-distro-not-installed "$DISTRO" || exit 1
+		echo "---- zfsbootmenu-installer: Install '$DISTRO'."
+		echo "---- zfsbootmenu-installer: Initial install."
+		"$0" mkdir-p $WORKDIR/mnt || exit 1
+		zfs create -o mountpoint=$WORKDIR/mnt -o canmount=noauto \
+			$TANK_NAME/ROOT/"$DISTRO" && \
+		zfs mount $TANK_NAME/ROOT/"$DISTRO" && \
+		"$0" distro install-outside "$DISTRO" $WORKDIR/mnt
+		EXIT_CODE=$?
+		if test $EXIT_CODE '!=' 0; then
+			echo "$0": Initial installation failed. >&2
+			exit $EXIT_CODE
+		fi
+		"$0" copy-config-to-new-distro || exit 1
+		"$0" mount-magic-to-new-distro || exit 1
+		echo "---- zfsbootmenu-installer: Chroot install."
+		chroot $WORKDIR/mnt \
+			/usr/local/bin/zfsbootmenu-installer \
+				distro install-chroot "$DISTRO"
+		EXIT_CODE=$?
+		if test $EXIT_CODE '!=' 0; then
+			echo "$0": Chroot installation failed. >&2
+			exit $EXIT_CODE
+		fi
+		# Do a final signing of any kernels, in case
+		# the installation process screwed up the
+		# ordering.
+		chroot $WORKDIR/mnt \
+			/usr/local/bin/zfsbootmenu-installer sign-all-kernels
+		EXIT_CODE=$?
+		if test $EXIT_CODE '!=' 0; then
+			echo "$0": Final kernel signing failed. >&2
+			exit $EXIT_CODE
+		fi
+		exit 0
+		;;
+
+	# Wrapper function for install-distro-core.
+	# Cleans up the work directory if there is
+	# a failure and destroys the created dataset.
+	install-distro)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": requires DISTRO argument >&2
+			exit 1
+		fi
+		DISTRO="$2"
+		if "$0" distro check "$DISTRO"; then :; else
+			echo "$0": Unknown DISTRO: $DISTRO >&2
+			exit 1
+		fi
+		"$0" check-distro-not-installed "$DISTRO" || exit 1
+		if test '!' -d $WORKDIR/config; then
+			echo "$0": requires $WORKDIR/config >&2
+			exit 1
+		fi
+		"$0" install-distro-core "$DISTRO"
+		EXIT_CODE=$?
+		if test $EXIT_CODE '!=' 0; then
+			# Clean up.
+			echo "$0": Install "$DISTRO" failed, destroying. >&2
+			umount -qnR $WORKDIR/mnt
+			if zfs list $TANK_NAME/ROOT/"$DISTRO" > /dev/null 2>&1; then
+				zfs destroy -R $TANK_NAME/ROOT/"$DISTRO" > /dev/null 2>&1
+			fi
+			exit $EXIT_CODE
+		fi
+		umount -qnR $WORKDIR/mnt
+		zfs set mountpoint=/ $TANK_NAME/ROOT/"$DISTRO"
+		zfs set org.zfsbootmenu:active=on $TANK_NAME/ROOT/"$DISTRO"
+		echo "---- zfsbootmenu-installer: Enabled '$DISTRO' Boot Environment."
+		exit 0
+		;;
+
+        ################################################# install Boot Environment
+
+	clean-up-work)
+		umount -qnR $WORKDIR/mnt > /dev/null 2>&1
+		rm -rf $WORKDIR > /dev/null 2>&1
+		exit 0
+		;;
+
+	sign-all-kernels)
+		"$0" ensure sbsign || exit 1
+		"$0" ensure sbverify || exit 1
+		cd /boot
+		for KERNEL in vmlinuz* vmlinux* linux* linuz* kernel*;
+		do
+			# POSIX specifies that globs that
+			# match nothing will be passed
+			# through.
+			# If the file doesn't exist, it is
+			# a glob that didn't match and we
+			# should skip it.
+			if test '!' -e "$KERNEL"; then
+				# skip
+				:
+			# skip symbolic links
+			elif test -L "$KERNEL"; then
+				:
+			# skip already-signed
+			elif sbverify --cert /usr/local/mok/MOK.pem "$KERNEL" > /dev/null 2>&1; then
+				:
+			else
+				echo "---- zfsbootmenu-installer: Sign /boot/$KERNEL"
+				if sbsign --key /usr/local/mok/MOK.priv --cert /usr/local/mok/MOK.pem "$KERNEL" --output "$KERNEL";
+				then
+					:
+				else
+					echo "$0": Failed to sign /boot/$KERNEL >&2
+					exit 1
+				fi
+			fi
+		done
+		exit 0
+		;;
+
+        ################################################# ensures
+
+	# TODO: Adapt to the system's package manager.
+	ensure)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": require TOOL argument >&2
+			exit 1
+		fi
+		TOOL="$2"
+		if which "$TOOL" > /dev/null 2>&1; then
+			# Already installed.
+			exit 0
+		fi
+		# TODO: figure out the system's package manager
+		exec "$0" ensure-apt "$TOOL"
+		;;
+
+	ensure-apt)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": require TOOL argument >&2
+			exit 1
+		fi
+		TOOL="$2"
+		case "$TOOL" in
+			# Add special cases here where
+			# the tool name is not the same
+			# as the package name.
+			# Note that various distros might
+			# have different package namings
+			# too.... SIGH
+			# Worse, some distros might put
+			# some tools together, that other
+			# distros keep in separate packages.
+			# This is why 'ensure' names tools
+			# and not packages.
+
+			# For tools whose package has
+			# different names depending on
+			# distro, we could do:
+			#      apt -y distro1-package > /dev/null 2>&1
+			#      apt -y package-distro2 > /dev/null 2>&1
+			#      if which "$TOOL" > /dev/null 2>&1; then
+			#          exit 0
+			#      else
+			#          echo "$0": Failed to install $TOOL >&2
+			#          exit 1
+			#      fi
+
+			ar)
+				PACKAGE=binutils
+				;;
+
+			iconv)
+				PACKAGE=libc-bin
+				;;
+
+			lsblk)
+				PACKAGE=util-linux
+				;;
+
+			pacstrap)
+				PACKAGE=arch-install-scripts
+				;;
+
+			sbsign|sbverify)
+				PACKAGE=sbsigntool
+				;;
+
+			sha256sum|sort)
+				PACKAGE=coreutils
+				;;
+
+			xz)
+				PACKAGE=xz-utils
+				;;
+
+			*)
+				PACKAGE="$TOOL"
+				;;
+
+		esac
+		apt install -y "$PACKAGE" > /dev/null 2>&1
+		if test $? '!=' 0; then
+			echo "$0": Failed to ensure "'"$TOOL"'" installed. >&2
+			exit 1
+		fi
+		;;
+
+        ################################################# ensures
+
+	select-vdev)
+		printf 'single\nmirror\nraidz1\nraidz2\nraidz3\n' | fzf --layout=reverse-list --no-sort --no-input --border --border-label='Select ZFS Pool Type' --preview="$0"' preview-vdev {}'
+		exit 0
+		;;
+
+	preview-vdev)
+		case $2 in
+			single)
+				cat <<DESC
+Create a pool with just one disk.
+You can expand this later to 'mirror' with 'zpool attach'.
+DESC
+				;;
+
+			mirror)
+				cat <<DESC
+Create a pool with 2 or 3 disks which can tolerate the
+loss of all but one disk, i.e. RAID1.
+You can expand this later with more mirrored disks with
+'zpool attach', or expand to a RAID10 by adding another
+mirror with 'zpool add ${TANK_NAME} mirror'.
+DESC
+				;;
+
+			raidz1)
+				cat <<DESC
+Create a pool with 3 or more disks, which can tolerate
+the loss of up to one disk, i.e. RAID5.
+DESC
+				;;
+
+			raidz2)
+				cat <<DESC
+Create a pool with 4 or more disks, which can tolerate
+the loss of up to two disks, i.e. RAID6.
+DESC
+				;;
+
+			raidz3)
+				cat <<DESC
+Create a pool with 5 or more disks, which can tolerate
+the loss of up to three disks.
+DESC
+				;;
+
+			*)
+				echo "$0": Unknown vdev type: $2 >&2
+				exit 1
+				;;
+
+		esac
+		exit 0
+		;;
+
+	select-disks)
+		if test X${3+set} '!=' Xset; then
+			echo "$0": requires REASON DANGER arguments >&2
+			exit 1
+		fi
+		REASON="$2"
+		DANGER="$3"
+		"$0" lsdisk |  fzf --layout=reverse-list --no-input --border --multi --border-label='Select disks '"$REASON" --preview="$0"' preview-disk {} '"$DANGER"
+		exit 0
+		;;
+
+	lsdisk)
+		"$0" ensure lsblk > /dev/null 2>&1
+		lsblk -e 7 -o PATH,TYPE -nPd | grep '"disk"$'  | sed -e 's/^PATH="//' -e 's/".*$//'
+		exit 0
+		;;
+
+	preview-disk)
+		if test X${3+set} '!=' Xset; then
+			echo "$0": requires DISK DANGER arguments >&2
+			exit 1
+		fi
+		DISK="$2"
+		DANGER="$3"
+		"$0" ensure lsblk > /dev/null 2>&1
+		echo 'Disk: ' $DISK
+		printf 'Model: '; lsblk -nd -o MODEL $DISK
+		printf 'Serial: '; lsblk -nd -o SERIAL $DISK
+		printf 'Size: '; lsblk -nd -o SIZE $DISK
+		printf 'Connection: '; lsblk -nd -o TRAN $DISK
+		cat <<HELP
+
+Press [tab] to select/deselect, [enter] to finish selection
+Press [esc] twice to abort
+HELP
+		if test X"$DANGER" '=' Xyes; then
+			cat <<DANGER
+
+SELECTED DISKS WILL BE FORMATTED AND LOSE ALL THEIR DATA.
+DANGER
+		fi
+		exit 0
+		;;
+
+	# Check if the given vdev option in $2 has
+	# the correct number of disks in $3... onwards
+	# Exit code 0 if OK, non-zero otherwise.
+	check-vdev-num-disks)
+		VDEV=$2
+		shift
+		shift
+		case $VDEV in
+			single)
+				if test $# -eq 1; then
+					:
+				else
+					echo "$0": "'"single"'" pool requires exactly one disk >&2
+					exit 1
+				fi
+				;;
+
+			mirror)
+				if test $# -eq 2 || test $# -eq 3; then
+					:
+				else
+					echo "$0": "'"mirror"'" pool requires two or three disks >&2
+					exit 1
+				fi
+				;;
+
+			raidz1)
+				if test $# -ge 3; then
+					:
+				else
+					echo "$0": "'"raidz1"'" pool requires at least three disks >&2
+					exit 1
+				fi
+				;;
+
+			raidz2)
+				if test $# -ge 4; then
+					:
+				else
+					echo "$0": "'"raidz2"'" pool requires at least four disks >&2
+					exit 1
+				fi
+				;;
+
+			raidz3)
+				if test $# -ge 5; then
+					:
+				else
+					echo "$0": "'"raidz3"'" pool requires at least five disks >&2
+					exit 1
+				fi
+				;;
+
+			*)
+				echo "$0": Unrecognized vdev type: $VDEV >&2
+				exit 1
+				;;
+		esac
+		exit 0
+		;;
+
+	# Ask user to select a vdev pool option,
+	# and disks to put in it.
+	select-vdev-disks)
+		VDEV=`"$0" select-vdev`
+		# Did user cancel?
+		if "$0" preview-vdev "$VDEV" > /dev/null 2>&1; then
+			:
+		else
+			exit 1
+		fi
+		# Assumes device paths don't have spaces T.T
+		DISKS="`$0 select-disks "to install in '$VDEV'" yes`"
+		if "$0" check-vdev-num-disks $VDEV $DISKS; then
+			:
+		else
+			exit 1
+		fi
+		echo $VDEV $DISKS
+		exit 0
+		;;
+
+        ################################################# Main Menu
+
+	Initialize)
+		echo "$0": Not yet implemented >&2
+		exit 1
+		;;
+
+	AddBootEnvironment)
+		DISTRO=`"$0" select-distro "Add Boot Environment"`
+		if "$0" distro check "$DISTRO"; then :; else
+			echo "---- zfsbootmenu-installer: AddBootEnvironment: cancelled"
+			exit 0
+		fi
+		"$0" check-distro-not-installed "$DISTRO" || exit 1
+		echo "---- zfsbootmenu-installer: AddBootEnvironment: $DISTRO"
+		"$0" prepare-work-from-existing
+		if test $? '!=' 0; then
+			"$0" clean-up-work
+			exit 1
+		fi
+		"$0" install-distro $DISTRO
+		EXIT_CODE=$?
+		"$0" clean-up-work
+		exit $EXIT_CODE
+		;;
+
+	ChangeDefaultBoot)
+		echo "$0": Not yet implemented >&2
+		exit 1
+		;;
+
+	ReflashESP)
+		echo "$0": Not yet implemented >&2
+		exit 1
+		;;
+
+	PrepareNewDisk)
+		echo "$0": Not yet implemented >&2
+		exit 1
+		;;
+
+        ################################################# Main Menu
+
+	*)
+		echo "$0": Unknown sub-command: "$1" >&2
+		exit 1
+		;;
+
+
+	esac
+
+	exit 0
+fi
+
+if test X${EUID:-$(id -u)} '!=' X0; then
+	echo "$0": not running as superuser, aborting >&2
+	exit 1
+fi
+if test '!' -x "$0"; then
+	chmod a+x "$0"
+fi
+if test -e $WORKDIR; then
+	cat >&2 <<ERR
+$0: $WORKDIR present, aborting
+$0: If you are sure no other instance is running, do as superuser:
+$0:     umount -qnR $WORKDIR/mnt
+$0:     rm -rf $WORKDIR
+ERR
+	exit 1
+fi
+
+if "$0" detect-installed; then
+	MAINMENU='Exit\nAbout\nAddBootEnvironment\nChangeDefaultBoot\nReflashESP\nPrepareNewDisk\nInitialize\n'
+else
+	MAINMENU='Exit\nAbout\nInitialize\n'
+fi
+
+if "$0" ensure fzf; then :; else
+	echo "$0": Unable to ensure needed tool fzf >&2
+fi
+FZF_DEFAULT_COMMAND=
+FZF_DEFAULT_OPTS=
+FZF_DEFAULT_OPTS_FILE=
+FZF_API_KEY=
+export FZF_DEFAULT_COMMAND
+export FZF_DEFAULT_OPTS
+export FZF_DEFAULT_OPTS_FILE
+export FZF_API_KEY
+
+SEL=`printf $MAINMENU | fzf --layout=reverse-list --no-sort --no-input --border --border-label='zfsbootmenu-installer '"$VERSION"' Main Menu'  --preview="$0"' preview-mainmenu {}'`
+
+case $SEL in
+	Initialize|AddBootEnvironment|ChangeDefaultBoot|ReflashESP|PrepareNewDisk)
+		;;
+
+	*)
+		exit 0
+		;;
+
+esac
+
+exec "$0" "$SEL"

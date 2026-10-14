@@ -1,0 +1,449 @@
+For the below, package names are Ubuntu.
+
+Package `shim-signed` in Ubuntu contains the signed `shim` bootloader.
+
+The files installed that we need to get into the `/boot/efi` are:
+
+    /usr/lib/shim/shimx64.efi.signed <- actual `shim` bootloader.
+    /usr/lib/shim/mmx64.efi <- MOK ("Machine Owner Key") Manager binary.
+    /usr/lib/shim/fbx64.efi <- Fallback bootloader.
+
+`shim` has a concept of Machine Owner Key, i.e. a key that the owner of
+the actual machine uses to sign binaries that will be loaded later.
+The MOK is installed into NVRAM, but is technically separate from the
+firmware-trusted keys.
+
+Instead, the firmware trusts the signed `shim` EFI binary, then the `shim`
+trusts the second bootloader if it is itself signed with a firmware key,
+or with a Machine Owner Key.
+
+The fallback bootloader is used if `shim` can't find the second bootloader.
+The fallback bootloader will look for `BOOT.CSV` files in other
+sub-directories of the EFI boot partition (`esp`).
+This `BOOT.CSV` would then be used by the fallback loader to add a new
+entry to the EFI.
+
+The `shim` bootloader uses fixed filenames in the same directory.
+On AMD-64 those are:
+
+    grubx64.efi <- the second bootloader to use (replace with ZfsBootMenu!)
+    mmx64.efi <- the MOK Manager binary above.
+    fbx64.efi <- the fallback bootloader.
+
+In particular, `grubx64.efi` ***MUST*** be signed, either by a firmware key,
+or by some registered MOK.
+This is the second bootloader.
+
+The expected layout of the `esp` is like this:
+
+    # These are the "fallback" path bootstrap when the EFI list
+    # in the firmware is not populated or missing.
+    \EFI\BOOT\bootx64.efi <- `shim` from `shimx64.efi.signed`
+    \EFI\BOOT\mmx64.efi
+    \EFI\BOOT\fbx64.efi
+
+    \EFI\ZFSBootMenu\shimx64.efi <- `shim` from `shimx64.efi.signed`
+    \EFI\ZFSBootMenu\mmx64.efi
+    \EFI\ZFSBootMenu\grubx64.efi <- actually ZfsBootMenu EFI, but SIGNED by some MOK
+    \EFI\ZFSBootMenu\BOOTX64.CSV
+
+Then the `BOOTX64.CSV` file contains the following, except in UCS-2 little-endian
+format (use `iconv -t UCS-2 < input > output` to convert):
+
+    shimx64.efi,ZFSBootMenu,,This is the boot entry for ZFSBootMenu
+
+In case the EFI entries are erased, the fallback bootloader `fbx64.efi`
+will read the `\EFI\ZBM\BOOTX64.CSV` file and regenerate the boot entry
+for ZFSBootMenu.
+
+Installing `shim-signed` on Ubuntu creates one MOK ("Machine Owner Key") located here:
+
+    /var/lib/shim-signed/mok
+    /var/lib/shim-signed/mok/MOK.priv <- private signing key
+    /var/lib/shim-signed/mok/MOK.der <- DER format of the certificate, for uploading with mokutil
+
+The above MOK has a 100-year lifetime, which is good enough for most purposes.
+
+The `MOK.priv` file is also only readable by `root`.
+
+***HOWEVER***, this key is specifically only created for *kernel module
+signing*.
+Specifically, the `openssl.cnf` for it contains:
+
+    # codeSigning:  specifies that this key is used to sign code.
+    #
+    # 1.3.6.1.4.1.2312.16.1.2:  defines this key as used for module signing
+    #                           only. See https://lkml.org/lkml/2015/8/26/741.
+    #
+    extendedKeyUsage        = codeSigning,1.3.6.1.4.1.2312.16.1.2
+
+The above link shows the rest of the OIDs defined for Linux:
+
+
+            1.3.6.1.4.1.2312.16     Kernel OIDs
+            1.3.6.1.4.1.2312.16.1   - X.509 extendedKeyUsage restriction set
+            1.3.6.1.4.1.2312.16.1.1   - Firmware signing only
+            1.3.6.1.4.1.2312.16.1.2   - Module signing only
+            1.3.6.1.4.1.2312.16.1.3   - Kexecable image signing only
+            1.3.6.1.4.1.2312.16.1.4   - 802.11 regulatory data
+            1.3.6.1.4.1.2312.16.1.5   - SELinux policy signing only
+
+However, we also need to be aware of the following OID:
+
+            1.3.6.1.4.1.311.10.3.6
+
+Which is a Microsoft OID, apparently described as "Windows system component
+verification (signed by the "NT5" build lab) (szOID_NT5_CRYPTO)", and is in
+the Microsoft namespace.
+
+From what I can tell, 1.3.6.1.4.1.311.10.3.6 is used for signing EFI images.
+
+I am uncertain what happens if you add both module signing and EFI signing.
+I have seen a reference that claims that giving both the above Microsoft
+EFI signing OID and the Linux module signing only OID will cause kernel
+module validation to fail, but I haven't tried it seriously.
+
+On the other hand, I do know for a certain fact that not providing an
+`extendedKeyUsage` during MOK creation will create a key that can be used
+to sign both EFI images and kernel modules; I did this in my initial
+install for a SecureBoot environment.
+The `shim` `README.md` suggests that it replaces the normal validation
+entry points (`LoadImage`/`StartImage`) with its own, so that it can also
+allow kernel module signatures and kernel images validation against the
+MOK.
+
+Finally, I know for a certain fact as well that a key *with* the Module
+Signing Only OID will *not* be respected for EFI images.
+
+This leads me to consider that we should ***NOT*** include the
+`extendedKeyUsage` entry and instead use a key without it!
+This seems to create a key that can be used to sign the
+ZFSBootMenu bootloader, the kernel `vmlinuz`, ***and***
+`.ko` kernel modules.
+
+On Debian, the MOK created supposedly is located at:
+
+    /var/lib/dkms/mok.key <- private key
+    /var/lib/dkms/mok.pub <- public key, in DER format
+
+Though I don't think I've seen it in my Trixie virtual machine.
+
+I don't know if, like with the Ubuntu situation, this is a
+module-signing-only key, but we should probably generate a
+MOK that can sign for EVERYTHING.
+
+Another complication is that the default `shim-signed-common` process
+that creates `/var/lib/shim-signed/mok` only creates `MOK.der`, but
+the `sbsign` utility needs `MOK.pem` i.e. the PEM format.
+We... probably should override the `shim-signed` MOK, really.
+
+-----
+
+MOK Manager
+
+We can install the `mokutil` package to interact with the MOK Manager EFI binary.
+This installs the `mokutil` utility.
+
+The `mokutil` can be used to install the `.ko`-signing `MOK.der` file by:
+
+    mokutil --import /var/lib/shim-signed/mok/MOK.der
+
+The importation of the MOK will actually complete in the next reboot; the
+user has to manually manipulate the UI of the MOK Manager binary.
+The issue here is that this will require a password input from the user;
+on reboot, if you install the key that is imported, the user must re-enter
+the password.
+
+Alternatively, we can add the `MOK.cer` file into the `esp`; the user still
+has to manually enter into MOK Manager (which `shim` will normally do if
+the second bootloader is signed, but `shim` can't find the firmware key
+or MOK that signed it), but at least a password isn't necessary in that
+case.
+This has to be DER format.
+
+Since we want to have an encrypted pool anyway, we can reuse the pool
+password here.
+`mokutil --import` accepts an option `--hash-file`, which contains the
+hash of the password.
+We can generate the password hash from a shell variable by:
+
+    mokutil --generate-hash=${PASSWORD} > the-hash-file
+
+That way, the password used in MOK Manager is something the script can
+prompt or otherwise get into its shell variables.
+
+We need to then download the ZfsBootMenu EFI from https://get.zfsbootmenu.org/efi and
+rename it to `grubx64.efi` in the `\EFI\ZBM\` directory of the `esp`.
+
+This is a completely unsigned binary.
+Apparently it used to be signed by the ZfsBootMenu team (which had an OpenSSL pubkey
+that you could add as an MOK), but this is no longer done and you are instead
+supposed to sign it with your own local MOK.
+
+To sign, we must install `sbsigntool`, which installs `sbsign` and `sbverify`.
+`sbsign` needs the private key and certificate of the MOK you want to use, and
+generates a copy of the EFI binary being signed.
+
+-------
+
+Validating ZFSBootMenu
+
+We need to find who we can trust to acquire ZFSBootMenu for us.
+
+The link https://get.zfsbootmenu.org/efi only downloads the ZFSBootMenu EFI.
+We still need the signatures and public key.
+
+We should hardcode the public key.
+The `signify` public key is tiny and can be embedded in the script itself.
+
+    untrusted comment: ZFSBootMenu signing key public key
+    RWSUawlGznCLF8NxEb1EyrGpP2eIR9l7JIZgLzCdv+64uBDvfXNJm+cF
+
+The signature can be acquired from https://get.zfsbootmenu.org/sha256.sig .
+
+There is a theoretical race condition here when a new ZFSBootMenu is released;
+whichever one we fetch first, might be the older version and then we fetch
+the newer version of the other file.
+This is probably unlikely to occur however.
+
+The documentation describes how to validate:
+
+    signify -C -x sha256.sig -p /path/to/zfsbootmenu.pub
+
+And I discovered, to my horror, that the `signify` package on Ubuntu does
+***not*** actually match this tool; it's a different "tool" that creates
+random messages from files for no reason.
+Yay!
+
+Instead, we should install `signify-openbsd`, which installs the tool
+`signify-openbsd`.
+However, we should note that Void Linux apparently has `signify` instead, and
+if we want to include that as a possible Boot Environment for this tool, we
+do need to figure out which one is installed.
+
+Another complication is that `curl` and `wget` by default will save to a file
+named `efi` instead of the original filename, which is what the `sha256.sig`
+file indicates.
+We can suppress this with `wget`:
+
+    wget --content-disposition https://get.zfsbootmenu.org/efi
+
+This will download and put it in the filename indicated by the server.
+The problem is that this doesn't really have a good way for us to discover
+the actual file name --- what we can do is to create a temporary directory
+(which would then be empty) and then `wget` the file into it, and list the
+only file in that directory.
+
+-------
+
+DKMS signing
+
+Modern DKMS has automation for signing with MOK, by adding `mok_signing_key`
+and `mok_certificate`.
+These should point to the path to the mok private key and certificate.
+
+These configurations should be put in `/etc/dkms`.
+They can be put in a file in `/etc/dkms/framework.conf.d`
+
+The ZFSBootMenu guide for Debian mentions:
+
+    echo "REMAKE_INITRD=yes" > /etc/dkms/zfs.conf
+
+However, recent Debians don't need it (and in fact there were already
+deprecation warnings for that flag) and it can be left out.
+
+-------
+
+Swap
+
+Ideally if we are encrypting anyway, we should include the swap in the encryption.
+If this were a LVM tank, then the entire tank could have a LUKS encryption and
+then the swap would be a volume within the LVM tank.
+
+Unfortunately, ZFS itself needs to allocate memory while it is writing to disk,
+and that means that a swap file in a ZFS dataset or a swap partition on a `zvol`
+can trigger this memory allocation while the kernel is busy swapping out memory.
+(This is less likely to occur with `zvol`s configured for througput and simplest
+compression `zle` or `off`, but apparently it is possible to write C programs
+that can still trigger this deadlock even with such configurations)
+
+https://github.com/openzfs/zfs/issues/7734
+
+There are guides on the Internet for using `zvol` swap partitions, but the
+above issue points out that even as of this writing (October 2026) the crash
+still exists.
+The various configurations floating on the Internet might lower the probability
+of deadlocks, but doesn't actually remove it from the codebase.
+
+This probably means swap is not useable on ZFS on other kernels either, like
+BSD or Solaris.
+Honestly, the correct behavior should probably be to *not* have swap and
+use the ZFS ARC as the "swap", i.e. force ZFS to drop its ARC entries on
+memory pressure.
+
+What we can do instead would be to give the option to put
+some swap partition on *every* disk in the array.
+Since you will likely buy multiples of the same drive anyway,
+and ZFS doesn't really support having different sizes in
+the same VDEV, there's no point in having one drive lose
+some space for swap while the other disks have full space
+after the ESP; ZFS will treat all disks as having the
+swap space removed anyway.
+At least if we add a swap partition on every drive we
+can switch to a different swap partition if the drive
+hosting it dies.
+Then, we create an encryption key for the swap volume and
+store it in the ZFS pool --- this has the same protection
+as keeping the MOK in the ZFS Pool without a passphrase
+anyway.
+This should still allow for resume, since the ZFS Pool
+is unlocked already on booting into the kernel and we
+can decrypt the swap.
+
+The big problem of course is that making the swap volume
+match memory size means we can't, in practice, increase
+installed memory, at least not easily, heh.
+
+Honestly it would be nice if you could just enable
+hibernation into some volume without making that
+volume a swap for normal operation.
+See this for a hack that emulates it by turning off
+swap most of the time, but turns it on when triggering
+hibernation and getting out of it:
+
+* https://superuser.com/questions/1147616/hibernation-without-swap-enabled
+
+------------
+
+Pop!_OS
+
+Pop!_OS doesn't have its own dedicated release codenames; it reuses the same
+codenames as Ubuntu.
+It does have a separate set of repositories, including a mirror of Ubuntu
+that is used ass fallbacks for when a proprietary or release is not available.
+
+I don't know how to bootstrap a Pop!_OS install; its distribution always has
+been a LiveCD.
+I ***THINK*** it should be possible, for a Pop!_OS 24.04, to just
+`debootstrap noble`, then set up the apt sources for Pop!_PS,
+and then add the Pop!_OS key, then update and upgrade the system into
+Pop!_OS.
+
+The Pop!_OS key can be gotten by:
+
+    apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 63C46DF0140D738961429F4E204DD8AEC33A7AFF
+
+Looking at my old Pop!_OS system, it looks like the following repos should
+be included:
+
+    http://apt.pop-os.org/proprietary noble
+    http://apt.pop-os.org/release noble
+    http://apt.pop-os.org/ubuntu noble noble-security noble-updates noble-backports
+
+The Pop!_OS system seems to have dived directly into the modern `.sources`
+format rather than `sources.list`.
+
+Pop!_OS prefers its own desktop environment, `cosmic-desktop`.
+
+Since it has a mirror of Ubuntu, we can add the `universe` repository
+which contains `zfs-dkms`.
+Note that Pop!_OS releases its own Linux kernel in
+http://apt.pop-os.org/release , and unlike Ubuntu it seems Pop!_OS
+does not include ZFS into the kernels it releases.
+Thus, it does still need `zfs-dkms`.
+The issue is that `zfs-initramfs` does not depend on `zfs-dkms`
+on Ubuntu, as Ubuntu assumes all kernels already have ZFS.
+I believe the correct solution is to always add `zfs-dkms` *and*
+`zfs-initramfs` for Pop!_OS (whereas Debian does not need
+`zfs-dkms` as `zfs-initramfs` will pull it in).
+And `zfs-dkms` will only really work if we have `linux-headers-*`
+(it otherwise does ZILCH).
+
+----------------
+
+Tuxedo OS
+
+This seems to be largely the same technique as Pop!_OS above.
+Like Pop!_OS it seems to have its own Linux kernels, but reuses
+the release names of Ubuntu.
+If the technique works for Pop!_OS, it might work for Tuxedo.
+
+    https://deb.tuxedocomputers.com/ubuntu/ noble noble-nvidia
+
+This only has `main`, though!
+Looking into its `Packages` file, the Linux images claim to provide
+`zfs-dkms` and `spl-dkms`.
+However, there doesn't seem to be any actual tools like
+`zfsutils-linux`.
+
+This may need to get the PureOS treatment, see below.
+
+----------------
+
+PureOS
+
+PureOS has its own dedicated release code names.
+For PureOS 11, it is `crimson`.
+
+The repos included are:
+
+    deb http://repo.pureos.net/pureos/ crimson main
+    deb http://repo.pureos.net/pureos/ crimson-security main
+    deb http://repo.pureos.net/pureos/ crimson-updates main
+
+Unfortunately, OpenZFS is usually packaged as a DKMS, and
+`zfs-dkms` does not exist in the `main` repository of PureOS
+(it exists on `contrib` in Debian).
+There's a `zfs-fuse` but that is ANCIENT and unmaintained
+and probably has bugs.
+
+What we can do is to directly download a copy of the ZFS
+source code, and put it in our `/usr/local/src`, and
+directly use DKMS on it ourselves.
+See:
+
+* https://www.xmodulo.com/build-kernel-module-dkms-linux.html
+* https://danielcosenza.com/posts/lx-howto-dkms-kernel-module/
+
+This is 100% fine: We are not going to distribute the kernel
+and kernel module, we are just going to install it on our
+own computer.
+
+There's also this, which would be really convenient; it suggests
+building .deb files for your OS specifically on your system,
+then installing them:
+
+* https://openzfs.github.io/openzfs-docs/Developer%20Resources/Custom%20Packages.html#dkms-1
+
+In particular, in a PureOS virtual machine, the instructions
+from the above appear to work to get the ZFS module into the
+initrd and in a `modprobe`-able state, it seems:
+
+    sudo apt install alien autoconf automake build-essential \
+        debhelper-compat dh-dkms dh-python dkms \
+        fakeroot gawk libaio-dev libattr1-dev \
+        libblkid-dev libcurl4-openssl-dev libelf-dev \
+        libffi-dev libpam0g-dev libssl-dev libtirpc-dev \
+        libtool libudev-dev linux-headers-generic \
+        po-debconf python3 python3-all-dev python3-cffi \
+        python3-dev python3-packaging python3-setuptools \
+        python3-sphinx uuid-dev zlib1g-dev
+    cd zfs
+    ./configure --enable-systemd
+    make -j4 native-deb-utils
+    rm ../openzfs-zfs-dracut_*.deb
+    sudo apt install --fix-missing ../*.deb
+
+However, we need to check how to pass `root=`, and I don't
+know how each distribution changes this.
+Generally, what ZFSBootMenu does is to check for the `ID`
+or `ID_LIKE` inside the `os-release` file, which can be in
+`/usr/lib` or `/etc`.
+PureOS gives it as `ID=pureos`.
+If ZFSBootMenu doesn't recognize it (it doesn't recognize
+`pureos`, FWIW) then it defaults to `root=zfs:`, which is
+apparently what it uses in Debian and Ubuntu.
+Since PureOS is a Debian derivative, this should work, we
+hope.
+If that works, we can explicitly add a `ID_LIKE=debian`
+into the `os-release` file.
