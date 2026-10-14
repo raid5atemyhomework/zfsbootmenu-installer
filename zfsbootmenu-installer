@@ -673,6 +673,8 @@ distributions.
 Debian 'tasksel' will be launched during
 installation to let you select desktop
 environments and services.
+
+Nonfree drivers will be installed.
 DESC
 						;;
 
@@ -684,7 +686,9 @@ DESC
 
 					install-chroot)
 						echo "---- zfsbootmenu-installer: Installing Debian13 (in chroot)"
-						exec "$0" debian-install-chroot trixie
+						"$0" debian-install-chroot trixie && \
+						apt install -y firmware-linux-nonfree
+						exit $?
 						;;
 
 				esac
