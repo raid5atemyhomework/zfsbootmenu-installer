@@ -205,7 +205,7 @@ First, create the ZFS dataset and mount it somewhere
 
     mkdir -p /work
     zfs create -o mountpoint=/work -o canmount=noauto zroot/ROOT/DistroName
-    zfs mount zroot/Root/DistroName
+    zfs mount zroot/ROOT/DistroName
 
 Then use the "bootstrap into `chroot` jail" process
 for your distro into the `/work` dir.
