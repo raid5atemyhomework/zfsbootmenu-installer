@@ -1092,8 +1092,20 @@ SCRIPT
 			exit $EXIT_CODE
 		fi
 		zfs mount $TANK_NAME/home
+		# If the canmount property is not `on`,
+		# set it to `on` here while inside the
+		# chroot.
+		# This is necessary as the home dataset
+		# is first created with canmount=noauto
+		# during Initialize.
+		if test "`zfs get -H canmount -o value $TANK_NAME/home`" '!=' on; then
+			zfs set canmount=on $TANK_NAME/home
+		fi
 		# If it already exists, don't mess with it!
-		if test -d /home/"${USERNAME}"; then :; else
+		if test -d /home/"${USERNAME}"; then
+			echo "---- zfsbootmenu-installer: NOT messing with /home/${USERNAME}"
+			sleep 1
+		else
 			cp -a /etc/skel /home/"${USERNAME}"
 			if test '!' -d /home/"${USERNAME}"; then
 				echo "$0": Failed to create user homedir >&2
@@ -1465,7 +1477,7 @@ SOURCES_LIST
 			echo "$0": requires $WORKDIR/config >&2
 			exit 1
 		fi
-		"$0" install-distro-core "$DISTRO"
+		"$0" install-distro-core "$DISTRO" "$TANK_NAME"
 		EXIT_CODE=$?
 		if test $EXIT_CODE '!=' 0; then
 			# Clean up.
@@ -1717,6 +1729,338 @@ DANGER
 		exit 0
 		;;
 
+	################################################# Initialize Interview
+
+	# The part of Initialize where it
+	# asks what the user wants.
+	initialize-interview)
+		"$0" mkdir-p $WORKDIR/config || exit 1
+		"$0" ensure grep || exit 1
+		"$0" ensure whiptail || exit 1
+
+		"$0" initialize-interview-hostname && \
+		"$0" initialize-interview-username && \
+		"$0" initialize-interview-password
+		if test $? '!=' 0; then
+			exit 1
+		fi
+
+		"$0" select-vdev-disks > $WORKDIR/config/vdev_disks
+		if test $? '!=' 0; then
+			exit 1
+		fi
+		"$0" select-distro > $WORKDIR/config/distro
+		if "$0" distro check "`cat $WORKDIR/config/distro`"; then :; else
+			exit 1
+		fi
+
+		"$0" initialize-prepare-vdev-disks
+		"$0" initialize-interview-to-confirm
+
+		exit 0
+		;;
+
+	initialize-interview-hostname)
+		whiptail --inputbox 'Enter machine name (hostname)' 0 0 2> $WORKDIR/config/hostname
+		if test $? '!=' 0; then
+			exit 1
+		fi
+		if grep '^[A-Za-z0-9][-A-Za-z0-9_.]*$' $WORKDIR/config/hostname > /dev/null 2>&1; then :; else
+			whiptail --msgbox 'Machine name must start with basic Latin letter or digit, and cannot be empty.
+
+Beyond the first character, you can also use . - _
+Spaces are not allowed.' 0 0
+			exec "$0" initialize-interview-hostname
+		fi
+		exit 0
+		;;
+
+	initialize-interview-username)
+		whiptail --inputbox 'Enter user name' 0 0 2> $WORKDIR/config/username
+		if test $? '!=' 0; then
+			exit 1
+		fi
+		if grep '^[A-Za-z0-9][-A-Za-z0-9_.]*$' $WORKDIR/config/username > /dev/null 2>&1; then :; else
+			whiptail --msgbox 'User name must start with basic Latin letter or digit, and cannot be empty.
+It is not your real name.
+
+Beyond the first character, you can also use . - _
+Spaces are not allowed.' 0 0
+			exec "$0" initialize-interview-username
+		fi
+		exit 0
+		;;
+
+	initialize-interview-password)
+		whiptail --title 'Create your password' --passwordbox 'XXXXXXXXXXXXXXXXXXX' 0 0 '' 2> $WORKDIR/config/zroot.key
+		if test $? '!=' 0; then
+			exit 1
+		fi
+		LEN=`cat $WORKDIR/config/zroot.key | wc --bytes`
+		if test $LEN -lt 8; then
+			whiptail --msgbox 'Password must be at least 8 characters!' 0 0
+			exec "$0" initialize-interview-password
+		fi
+		whiptail --title 'Re-enter same password' --passwordbox "XXXXXXXXXXXXXXXXXXX" 0 0 '' 2> $WORKDIR/config/zroot2.key
+		if test $? '!=' 0; then
+			exit 1
+		fi
+		if cmp -s $WORKDIR/config/zroot.key $WORKDIR/config/zroot2.key; then :; else
+			whiptail --msgbox 'Passwords do not match!
+Please try again.' 0 0
+			exec "$0" initialize-interview-password
+		fi
+		rm $WORKDIR/config/zroot2.key
+		# whiptail on my system doesn't add a newline.
+		echo >> $WORKDIR/config/zroot.key
+		exit 0
+		;;
+
+	# Create a to-confirm file from the
+	# data we gathered in `initialize-interview`
+	initialize-interview-to-confirm)
+		rm -rf $WORKDIR/to-confirm > /dev/null 2>&1
+		echo hostname:  "`cat $WORKDIR/config/hostname`" >> $WORKDIR/to-confirm
+		echo username:  "`cat $WORKDIR/config/username`" >> $WORKDIR/to-confirm
+		echo distro: "`cat $WORKDIR/config/distro`" >> $WORKDIR/to-confirm
+
+		IS_VDEV_FLAG=yes
+		for WORD in `cat $WORKDIR/config/vdev_disks`; do
+			if test $IS_VDEV_FLAG '=' yes; then
+				echo 'zpool:' "$WORD" >> $WORKDIR/to-confirm
+				echo >> $WORKDIR/to-confirm
+				echo ANY DATA ON THESE DISKS WILL BE DESTROYED. >> $WORKDIR/to-confirm
+
+				IS_VDEV_FLAG=no
+			else
+				echo >> $WORKDIR/to-confirm
+				"$0" describe-disk "$WORD" >> $WORKDIR/to-confirm
+			fi
+		done
+		exit 0
+		;;
+
+	# Split the vdev_disks file into
+	# vdev and disks, and convert every
+	# disk into by-id
+	initialize-prepare-vdev-disks)
+		rm -rf $WORKDIR/config/vdev $WORKDIR/config/disks > /dev/null 2>&1
+		IS_VDEV_FLAG=yes
+		for WORD in `cat $WORKDIR/config/vdev_disks`; do
+			if test $IS_VDEV_FLAG '=' yes; then
+				echo $WORD > $WORKDIR/config/vdev
+				IS_VDEV_FLAG=no
+			else
+				"$0" get-disk-id "$WORD" >> $WORKDIR/config/disks
+			fi
+		done
+		exit 0
+		;;
+
+	################################################# Initialize Interview
+
+	################################################# Initialize Processing
+
+	initialize-processing)
+		echo "---- zfsbootmenu-installer: Initialize: Begin."
+		if test '!' -f /etc/hostid; then
+			# See: https://github.com/zbm-dev/zfsbootmenu/discussions/465
+			zgenhostid 0x00bab10c
+		fi
+		cp /etc/hostid $WORKDIR/config/hostid
+		"$0" create-mok-inner "`cat $WORKDIR/config/hostname`" $WORKDIR/config/mok && \
+		"$0" initialize-submit-mok && \
+		"$0" prepare-esp-in-work && \
+		"$0" initialize-format-disks && \
+		"$0" initialize-find-parts
+		if test $? '!=' 0; then
+			exit 1
+		fi
+		DISTRO="`cat $WORKDIR/config/distro`"
+		"$0" initialize-zpool-create && \
+		"$0" install-distro-core "$DISTRO"
+		if test $? '!=' 0; then
+			exit 1
+		fi
+		umount -qnR $WORKDIR/mnt
+		zfs set mountpoint=/ $TANK_NAME/ROOT/"$DISTRO"
+		zfs set org.zfsbootmenu:active=on $TANK_NAME/ROOT/"$DISTRO"
+		zpool set bootfs=$TANK_NAME/ROOT/"$DISTRO" $TANK_NAME
+		sync
+		zpool export $TANK_NAME
+		sync
+		sleep 1
+		udevadm trigger
+		echo "---- zfsbootmenu-installer: Installed '$DISTRO' into $TANK_NAME"
+		cat <<MSG
+
+Congratulations, installation has completed!
+
+NOTE!
+
+When you next restart your new system, the
+"MOK Management" interface will appear.
+
+You can then "Enrol MOK" there.
+Select that, then "Continue" and enter your password.
+
+This registers your Machine Operator Key (MOK) so
+you can run bootloaders, kernels, and kernel modules
+that you install, while the machine has Secure Boot
+enabled.
+
+You can also "Enroll key from disk" and search for
+"MOK.cer", which is a certificate of your Machine
+Operator Key.
+MSG
+		exit 0
+		;;
+
+	initialize-submit-mok)
+		"$0" ensure mokutil || exit 1
+		# pipe the password in.
+		cat $WORKDIR/config/zroot.key $WORKDIR/config/zroot.key | \
+		mokutil --import $WORKDIR/config/mok/MOK.der > /dev/null
+		exit $?
+		;;
+
+	initialize-format-disks)
+		exec "$0" format-disks `cat $WORKDIR/config/disks`
+		;;
+
+	# Find the partition names that we will put
+	# into the pool, and load $WORKDIR/config/parts
+	# We always set the ZFS pool member as the
+	# second partition of the disk.
+	initialize-find-parts)
+		echo "---- zfsbootmenu-installer: Initialize: Preparing parts file."
+		"$0" ensure lsblk || exit 1
+		rm -rf $WORKDIR/config/parts > /dev/null 2>&1
+		for DISK in `cat $WORKDIR/config/disks`; do
+			"$0" initialize-find-part-try \
+				"$DISK"-part2 \
+				"$DISK"p2 \
+				"$DISK"2 >> $WORKDIR/config/parts
+			if test $? '!=' 0; then
+				echo "$0": Unable to find parttion 2 of $DISK >&2
+				exit 1
+			fi
+		done
+		exit 0
+		;;
+
+	# This iterates over each of its arguments,
+	# printing the first argument it finds that
+	# is a block device that is a partition.
+	initialize-find-part-try)
+		if test X${2+set} '!=' Xset; then
+			# out of arguments.
+			exit 1
+		fi
+		shift
+		TRY_PART="$1"
+		lsblk -o TYPE -nd "$TRY_PART" > $WORKDIR/thing-type
+		if test $? '=' 0; then
+			# is some kind of block device,
+			# but is it a 'part'?
+			if test "`cat $WORKDIR/thing-type`" '=' "part"; then
+				rm -rf $WORKDIR/thing-type > /dev/null 2>&1
+				echo "$TRY_PART"
+				# found it, stop processing.
+				exit 0
+			fi
+		fi
+		rm -rf $WORKDIR/thing-type > /dev/null 2&1
+
+		# Above check failed, move to next.
+		shift
+		# Some shells might make "$@" into
+		# "" if there are no more arguments.
+		if X${1+set} '!=' Xset; then
+			# out of arguments.
+			exit 1
+		fi
+		# tail call optimization considered awesome
+		exec "$0" initialize-find-part-try "$@"
+		;;
+
+	initialize-zpool-create)
+		"$0" ensure whiptail || exit 1
+		whiptail --msgbox 'About to create ZFS Pool.
+
+On some Live CD environments, a pop-up may appear,
+telling you that something went wrong with the system.
+
+It is benign and you can ignore it.
+Installation will continue successfully regardless.
+' 0 0
+		# Put the zroot.key in the expected place.
+		"$0" mkdir-p /etc/zfs || exit 1
+		cp $WORKDIR/config/zroot.key /etc/zfs/zroot.key
+		chmod 000 /etc/zfs/zroot.key
+		if test "`cat $WORKDIR/config/vdev`" '=' single; then
+			zpool create -f \
+				-o ashift=12 \
+				-O compression=lz4 \
+				-O acltype=posixacl \
+				-O xattr=sa \
+				-O relatime=on \
+				-O encryption=aes-256-gcm \
+				-O keylocation=file:///etc/zfs/zroot.key \
+				-O keyformat=passphrase \
+				-O org.zfsbootmenu:commandline='quiet splash' \
+				-o autotrim=on \
+				-o compatibility=openzfs-2.2 \
+				-m none $TANK_NAME \
+				`cat $WORKDIR/config/parts`
+			EXIT_CODE=$?
+		else
+			zpool create -f \
+				-o ashift=12 \
+				-O compression=lz4 \
+				-O acltype=posixacl \
+				-O xattr=sa \
+				-O relatime=on \
+				-O encryption=aes-256-gcm \
+				-O keylocation=file:///etc/zfs/zroot.key \
+				-O keyformat=passphrase \
+				-O org.zfsbootmenu:commandline='quiet splash' \
+				-o autotrim=on \
+				-o compatibility=openzfs-2.2 \
+				-m none $TANK_NAME \
+				`cat $WORKDIR/config/vdev`
+				`cat $WORKDIR/config/parts`
+			EXIT_CODE=$?
+		fi
+		if test $EXIT_CODE '!=' 0; then
+			echo "$0": Unable to create ZFS Pool >&2
+			exit 1
+		fi
+		sync
+		zfs load-key -L file://$WORKDIR/config/zroot.key "$TANK_NAME" > /dev/null 2>&1
+		zfs create -o mountpoint=none "$TANK_NAME"/ROOT
+		# Create the home directory with canmount=noauto
+		# at first.
+		# If we create it canmount=on here (the default)
+		# the dataset will be mounted now, but this is
+		# executing within the Live environment and
+		# replace the /home of the Live environment.
+		# If the user downloaded zfsbootmenu-installer
+		# to /home, it would get lost.
+		# Instead, we keep `canmount=noauto` to prevent
+		# it from being mounted NOW.
+		# We instead do the `canmount=on` setting inside
+		# the `chroot` jail, where the `/home` would be
+		# truly empty.
+		zfs create -o mountpoint=/home -o canmount=noauto "$TANK_NAME"/home
+		echo "---- zfsbootmenu-installer: Created ZFS Pool."
+		udevadm trigger
+		sync
+		exit 0
+		;;
+
+	################################################# Initialize Processing
+
 	################################################# Confirmation
 
 	confirm)
@@ -1838,6 +2182,7 @@ DANGER
 				fi
 			fi
 		done
+		echo "$DISK"
 		exit 1
 		;;
 
@@ -1933,8 +2278,8 @@ DANGER
 		fi
 		DISK="$2"
 		echo "---- zfsbootmenu-installer: Formatting: $DISK"
-		"$0" erase-disk "$DISK" &&
-		"$0" partition-disk "$DISK" &&
+		"$0" erase-disk "$DISK" && \
+		"$0" partition-disk "$DISK" && \
 		"$0" flash-esp-from-work "$DISK"
 		exit $?
 		;;
@@ -1955,8 +2300,17 @@ DANGER
         ################################################# Main Menu
 
 	Initialize)
-		echo "$0": Not yet implemented >&2
-		exit 1
+		"$0" initialize-interview &&
+		"$0" confirm
+		if test $? '!=' 0; then
+			echo "---- zfsbootmenu-installer: Initialize: cancelled"
+			exit 0
+		fi
+
+		"$0" initialize-processing $TANK_NAME
+		EXIT_CODE=$?
+		$0 clean-up-work
+		exit $EXIT_CODE
 		;;
 
 	AddBootEnvironment)
@@ -2062,7 +2416,7 @@ ERR
 fi
 
 if "$0" detect-installed; then
-	MAINMENU='Exit\nAbout\nAddBootEnvironment\nChangeDefaultBoot\nReflashESP\nPrepareNewDisk\nInitialize\n'
+	MAINMENU='Exit\nAbout\nAddBootEnvironment\nChangeDefaultBoot\nReflashESP\nPrepareNewDisk\n'
 else
 	MAINMENU='Exit\nAbout\nInitialize\n'
 fi
