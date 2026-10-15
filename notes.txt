@@ -387,9 +387,9 @@ For PureOS 11, it is `crimson`.
 
 The repos included are:
 
-    deb http://repo.pureos.net/pureos/ crimson main
-    deb http://repo.pureos.net/pureos/ crimson-security main
-    deb http://repo.pureos.net/pureos/ crimson-updates main
+    deb https://repo.pureos.net/pureos/ crimson main
+    deb https://repo.pureos.net/pureos/ crimson-security main
+    deb https://repo.pureos.net/pureos/ crimson-updates main
 
 Unfortunately, OpenZFS is usually packaged as a DKMS, and
 `zfs-dkms` does not exist in the `main` repository of PureOS
@@ -448,6 +448,28 @@ hope.
 If that works, we can explicitly add a `ID_LIKE=debian`
 into the `os-release` file.
 
+Another is that due to some kind of weirdness,
+`debootstrap crimson` will fall back to using debian
+servers, which doesn't work because it's not Debian.
+Instead, do:
+
+    debootstrap crimson work https://repo.pureos.net/pureos
+
+-----------------------------------------
+
+Trisquel
+
+Trisquel is an Ubuntu derivative, again with its own
+release codenames and repositories.
+Trisquel 12 is `ecne`, and the repositories are:
+
+    deb https://archive.trisquel.org/trisquel/ ecne main
+    deb https://archive.trisquel.org/trisquel/ ecne-security main
+    deb https://archive.trisquel.org/trisquel/ ecne-updates main
+
+Like PureOS it has no ZFS support at all; likely the
+compile-OpenZFS-yourself path is the only viable one.
+
 ---------------------------
 
 GPT GUIDs
@@ -460,4 +482,44 @@ GPT GUIDs
     8200 Linux swap
     8300 Linux file system
     FD00 Linux RAID
+
+-------------------------------------------
+
+Keyrings
+
+Because APT classically used http, which allows MITM,
+it is entirely possible for repositories to be subverted.
+To protect against this, APT uses signatures from trusted
+PGP keys.
+
+If `debootstrap` fails to find a keyring in
+`/usr/share/keyrings`, it will fall back to an HTTPS
+archive, either `https://deb.debian.org/debian` or
+`https://archive.ubuntu.com/ubuntu` depending on the
+script.
+
+However, if you pass in an http mirror explicitly,
+`debootstrap` will completely trust the repository.
+Thus, for cases where the distro needs an http mirror,
+we should provide the keyring to trust for that distro.
+
+(generally, we actually do want the keyring to exist in
+general so that we can validate `Release`)
+
+We can manually get the keyring, export all of it to an
+armored ASCII file, then embed the file in the script.
+When installing a distro, we write out the embedded
+armored ASCII file, then create an empty keyring and
+import the armored ASCII file to regenerate a keyring
+we can use.
+We can then pass the keyring directly into `debootstrap` via
+`--keyring`.
+
+Convert to armored ASCII:
+
+    gpg --keyring ./foo.gpg --no-default-keyring --homedir /dev/null --export -a > foo.asc
+
+Import armored ASCII to empty keyring:
+
+    gpg --keyring ./empty.gpg --no-default-keyring --import ./foo.asc
 
