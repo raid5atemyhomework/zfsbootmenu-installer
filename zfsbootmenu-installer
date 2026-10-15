@@ -846,8 +846,7 @@ DESC
 					install-chroot)
 						echo "---- zfsbootmenu-installer: Installing Ubuntu26.04 (in chroot)"
 						"$0" ubuntu-install-chroot-common resolute && \
-						apt install -y ubuntu-desktop && \
-						snap install firefox
+						apt install -y ubuntu-desktop
 						EXIT_CODE=$?
 						if test $EXIT_CODE '!=' 0; then
 							exit $EXIT_CODE
@@ -888,8 +887,7 @@ DESC
 							exit $EXIT_CODE
 						fi
 						echo sddm shared/default-x-display-manager select sddm | debconf-set-selections
-						apt install -y kubuntu-desktop && \
-						snap install firefox
+						apt install -y kubuntu-desktop
 						EXIT_CODE=$?
 						if test $EXIT_CODE '!=' 0; then
 							exit $EXIT_CODE
