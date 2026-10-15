@@ -1167,11 +1167,12 @@ SETTINGS
 		fi
 		DIR="$2"
 		USERNAME="$3"
-		echo "---- zfsbootmenu-installer: typical: Enable SDDM auto-login: $DIR"
 		DESKTOP="`"$0" typical-find-desktop plasma`"
+		echo "---- zfsbootmenu-installer: typical: Enable SDDM auto-login: $DIR -> $DESKTOP"
 		"$0" mkdir-p "$DIR"
-		cat > "$DIR"/00-autologin.conf <<CONF
+		cat > "$DIR"/kde_settings.conf <<CONF
 [Autologin]
+Relogin=false
 Session=$DESKTOP
 User=$USERNAME
 CONF
