@@ -257,6 +257,10 @@ DESC
 				PACKAGE=libc-bin
 				;;
 
+			mkfs.vat)
+				PACKAGE=dosfstools
+				;;
+
 			pacstrap)
 				PACKAGE=arch-install-scripts
 				;;
@@ -271,6 +275,10 @@ DESC
 
 			sgdisk)
 				PACKAGE=gdisk
+				;;
+
+			udevadm)
+				PACKAGE=udev
 				;;
 
 			xz)
@@ -1440,6 +1448,21 @@ DESC
 		exit 0
 		;;
 
+	describe-disk)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": requires DISK argument >&2
+			exit 1
+		fi
+		DISK="$2"
+		"$0" ensure lsblk > /dev/null 2>&1
+		echo 'Disk: ' $DISK
+		printf 'Model: '; lsblk -nd -o MODEL $DISK
+		printf 'Serial: '; lsblk -nd -o SERIAL $DISK
+		printf 'Size: '; lsblk -nd -o SIZE $DISK
+		printf 'Connection: '; lsblk -nd -o TRAN $DISK
+		exit 0
+		;;
+
 	preview-disk)
 		if test X${3+set} '!=' Xset; then
 			echo "$0": requires DISK DANGER arguments >&2
@@ -1447,12 +1470,7 @@ DESC
 		fi
 		DISK="$2"
 		DANGER="$3"
-		"$0" ensure lsblk > /dev/null 2>&1
-		echo 'Disk: ' $DISK
-		printf 'Model: '; lsblk -nd -o MODEL $DISK
-		printf 'Serial: '; lsblk -nd -o SERIAL $DISK
-		printf 'Size: '; lsblk -nd -o SIZE $DISK
-		printf 'Connection: '; lsblk -nd -o TRAN $DISK
+		"$0" describe-disk "$DISK"
 		cat <<HELP
 
 Press [tab] to select/deselect, [enter] to finish selection
@@ -1539,7 +1557,7 @@ DANGER
 			exit 1
 		fi
 		# Assumes device paths don't have spaces T.T
-		DISKS="`$0 select-disks "to install in '$VDEV'" yes`"
+		DISKS="`"$0" select-disks "to install in '$VDEV'" yes`"
 		if "$0" check-vdev-num-disks $VDEV $DISKS; then
 			:
 		else
@@ -1548,6 +1566,28 @@ DANGER
 		echo $VDEV $DISKS
 		exit 0
 		;;
+
+	################################################# Confirmation
+
+	confirm)
+		if test '!' -f $WORKDIR/to-confirm; then
+			echo "$0": need to-confirm file in wokrdir >&2
+			exit 1
+		fi
+		SEL=`printf 'No\nYes\n' | fzf --layout=reverse-list --no-sort --no-input --border --border-label='ARE YOU SURE?' --preview="$0"' preview-confirm'`
+		rm $WORKDIR/to-confirm > /dev/null 2>&1
+		if test X"$SEL" '=' XYes; then
+			exit 0
+		else
+			exit 1
+		fi
+		;;
+
+	preview-confirm)
+		cat $WORKDIR/to-confirm
+		;;
+
+	################################################# Confirmation
 
         ################################################# ESP search
 
@@ -1615,6 +1655,11 @@ DANGER
 		mount -t vfat "$ESP" $WORKDIR/mnt || exit 1
 		# The `/` after `/esp` is significant!
 		rsync -r $WORKDIR/esp/ $WORKDIR/mnt
+
+		sync
+		sleep 1
+		umount -qnR $WORKDIR/mnt
+
 		echo "---- zfsbootmenu-installer: ESP flashed: $DISK"
 		exit 0
 		;;
@@ -1647,6 +1692,115 @@ DANGER
 		;;
 
         ################################################# Disk ID
+
+        ################################################# Disk formatting
+
+	erase-disk)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": require DISK argument >&2
+			exit 1
+		fi
+		DISK="$2"
+		"$0" ensure blkdiscard
+		"$0" ensure sgdisk
+		"$0" ensure wipefs
+		"$0" ensure udevadm
+
+		wipefs -a "$DISK" || exit $?
+
+		blkdiscard -f "$DISK"
+		EXIT_CODE=$?
+		# 0 = okay, 2 = device doesn't support TRIM
+		# everything else, we treat as error.
+		if test $EXIT_CODE '=' 0 -o $EXIT_CODE '=' 2; then :; else
+			exit $EXIT_CODE
+		fi
+
+		sgdisk ---zap-all "$DISK" || exit $?
+		sync
+		sleep 1
+		udevadm trigger
+
+		exit 0
+		;;
+
+	partition-disk)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": require DISK argument >&2
+			exit 1
+		fi
+		DISK="$2"
+		"$0" ensure mkfs.vfat
+		"$0" ensure sgdisk
+		"$0" ensure udevadm
+
+		# 1:1m:+512m - Create Partition 1 starting at
+		# absolute offset 1Mbyte, and end it +512Mbytes
+		# later.
+		# 2:0:0 - Create Partition 2 starting at
+		# the remaining space (the first "0") and go
+		# all the way until you reach the end (the
+		# second "0").
+		# EFI System Partition: ef00
+		# Solaris Root: bf00
+		sgdisk -n "1:1m:+512m" -t "1:ef00" \
+			-n "2:0:0" -t "2:bf00" "$DISK"
+		EXIT_CODE=$?
+		if test $EXIT_CODE '!=' 0; then
+			exit $EXIT_CODE
+		fi
+
+		sync
+		sleep 1
+		udevadm trigger
+
+		DISK_BY_ID="`"$0" get-disk-id "$DISK"`"
+		BOOT_PART="$DISK_BY_ID"-part1
+		if test '!' -e "$BOOT_PART"; then
+			echo "$0": Could not find partition 1 of $DISK: $BOOT_PART >&2
+			exit 1
+		fi
+		mkfs.vfat -v -F32 "$BOOT_PART"
+		EXIT_CODE=$?
+		if test $EXIT_CODE '!=' 0; then
+			exit $EXIT_CODE
+		fi
+
+		sync
+		sleep 1
+
+		exit 0
+		;;
+
+	format-disk)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": require DISK argument >&2
+			exit 1
+		fi
+		if test '!' -d $WORKDIR/esp; then
+			echo "$0": no prepared ESP in workdir >&2
+			exit 1
+		fi
+		DISK="$2"
+		echo "---- zfsbootmenu-installer: Formatting: $DISK"
+		"$0" erase-disk "$DISK" &&
+		"$0" partition-disk "$DISK" &&
+		"$0" flash-esp-from-work "$DISK"
+		exit $?
+		;;
+
+	format-disks)
+		shift
+		for DISK in "$@"; do
+			if "$0" format-disk "$DISK"; then :; else
+				exit 1
+			fi
+		done
+		echo "---- zfsbootmenu-installer: Formatting completed."
+		exit 0
+		;;
+
+        ################################################# Disk formatting
 
         ################################################# Main Menu
 
@@ -1694,8 +1848,37 @@ DANGER
 		;;
 
 	PrepareNewDisk)
-		echo "$0": Not yet implemented >&2
-		exit 1
+		DISKS="`"$0" select-disks 'to format for array (Prepare New Disk)' yes`"
+		OK=no
+		# Assumes paths don't have spaces T.T
+		for DISK in $DISKS; do
+			OK=yes
+			# assumes break doesn't exist yet
+		done
+		if test "$OK" '=' 'no'; then
+			echo "---- zfsbootmenu-installer: PrepareNewDisk: cancelled"
+			exit 0
+		fi
+		echo "---- zfsbootmenu-installer: PrepareNewDisk: $DISKS"
+
+		"$0" mkdir-p $WORKDIR
+		rm -rf $WORKDIR/to-confirm > /dev/null 2>&1
+		echo ANY DATA ON THESE DISKS WILL BE DESTROYED.  > $WORKDIR/to-confirm
+		for DISK in $DISKS; do
+			echo >> $WORKDIR/to-confirm
+			"$0" describe-disk "$DISK" >> $WORKDIR/to-confirm
+		done
+		if "$0" confirm; then :; else
+			"$0" clean-up-work
+			echo "---- zfsbootmenu-installer: PrepareNewDisk: cancelled"
+			exit 0
+		fi
+
+		"$0" prepare-esp-in-work && \
+		"$0" format-disks $DISKS
+		EXIT_CODE=$?
+		"$0" clean-up-work
+		exit $EXIT_CODE
 		;;
 
         ################################################# Main Menu
@@ -1746,7 +1929,7 @@ export FZF_DEFAULT_OPTS
 export FZF_DEFAULT_OPTS_FILE
 export FZF_API_KEY
 
-SEL=`printf $MAINMENU | fzf --layout=reverse-list --no-sort --no-input --border --border-label='zfsbootmenu-installer '"$VERSION"' Main Menu'  --preview="$0"' preview-mainmenu {}'`
+SEL=`printf "$MAINMENU" | fzf --layout=reverse-list --no-sort --no-input --border --border-label='zfsbootmenu-installer '"$VERSION"' Main Menu'  --preview="$0"' preview-mainmenu {}'`
 
 case $SEL in
 	Initialize|AddBootEnvironment|ChangeDefaultBoot|ReflashESP|PrepareNewDisk)
