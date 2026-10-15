@@ -257,7 +257,7 @@ DESC
 				PACKAGE=libc-bin
 				;;
 
-			mkfs.vat)
+			mkfs.vfat)
 				PACKAGE=dosfstools
 				;;
 
