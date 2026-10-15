@@ -96,6 +96,11 @@ automatically log you in, so that you only need enter your
 password once, to unlock the encryption.
 The encryption key *is* the password.
 
+(Note that the password entry is "blind" i.e. it will not
+show asterisks or circles for each character you type.
+Just keep typing the entire password and trust it is
+being checked.)
+
 Encryption is vital to protecting your Machine Owner Key
 while the machine is turned off, as the Machine Owner Key
 is stored passphrase-free on your ZFS Pool in order to
@@ -134,6 +139,23 @@ ECC RAM.
 Think of ECC RAM as simply closing the last loophole for
 data loss; ZFS closes all the others that lesser filesystems
 won't.
+
+`zfsbootmenu-installer` does not set up a swap partition.
+Ideally, the swap partition would be its own `zvol` on the
+same ZFS Pool you are using.
+Unfortunately, this is not safe, since there is an
+unfixable deadlock condition when swapping on a ZFS (there
+are guides on the Internet about how to make `zvol` swap
+partitions, but they only mitigate the risk of deadlock,
+not remove it completely).
+The issue is figuring out how to set up a swap partition
+when doing a multi-disk array; do we reserve a swap
+partition on each disk?
+How do we select the swap partition to use, if the disk
+whose swap partition we happen to be using goes down?
+(The ZFS Pool will continue operating, but what about
+the swap partition setup?)
+How big a swap space?
 
 Usage
 -----
