@@ -1037,13 +1037,31 @@ SETTINGS
 		DIR="$2"
 		USERNAME="$3"
 		echo "---- zfsbootmenu-installer: typical: Enable SDDM auto-login: $DIR"
+		DESKTOP="`"$0" typical-find-desktop plasma`"
 		"$0" mkdir-p "$DIR"
 		cat > "$DIR"/00-autologin.conf <<CONF
 [Autologin]
-Session=plasma
+Session=$DESKTOP
 User=$USERNAME
 CONF
 		exit 0
+		;;
+
+	# Finds a desktop environment
+	typical-find-desktop)
+		for DIR in /usr/share/wayland-sessions /usr/share/xsessions; do
+			if test -d "$DIR"; then
+				cd "$DIR"
+				for FILE in *; do
+					if test -f "$FILE"; then
+						echo "$FILE" | sed -e 's@\.desktop$@@'
+						exit 0
+					fi
+				done
+			fi
+		done
+		echo $2
+		exit 1
 		;;
 
 	# Ubuntu
