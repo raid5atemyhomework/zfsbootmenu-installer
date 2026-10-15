@@ -1912,6 +1912,13 @@ enabled.
 You can also "Enroll key from disk" and search for
 "MOK.cer", which is a certificate of your Machine
 Operator Key.
+
+When booting, you will be asked to
+"Enter passphrase for 'zroot'".
+This is where you enter your password.
+The password will not be displayed, not even as
+asterisks, but it will be checked, just type it in
+and trust it.
 MSG
 		exit 0
 		;;
