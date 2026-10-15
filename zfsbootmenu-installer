@@ -245,24 +245,32 @@ DESC
 				PACKAGE=binutils
 				;;
 
-			iconv)
-				PACKAGE=libc-bin
+			awk)
+				PACKAGE=gawk
 				;;
 
-			lsblk)
+			blkdiscard|lsblk|wipefs)
 				PACKAGE=util-linux
+				;;
+
+			iconv)
+				PACKAGE=libc-bin
 				;;
 
 			pacstrap)
 				PACKAGE=arch-install-scripts
 				;;
 
+			readlink|sha256sum|sort)
+				PACKAGE=coreutils
+				;;
+
 			sbsign|sbverify)
 				PACKAGE=sbsigntool
 				;;
 
-			sha256sum|sort)
-				PACKAGE=coreutils
+			sgdisk)
+				PACKAGE=gdisk
 				;;
 
 			xz)
@@ -1313,6 +1321,7 @@ SOURCES_LIST
 		umount -qnR $WORKDIR/mnt
 		zfs set mountpoint=/ $TANK_NAME/ROOT/"$DISTRO"
 		zfs set org.zfsbootmenu:active=on $TANK_NAME/ROOT/"$DISTRO"
+		sync
 		echo "---- zfsbootmenu-installer: Enabled '$DISTRO' Boot Environment."
 		exit 0
 		;;
@@ -1611,6 +1620,33 @@ DANGER
 		;;
 
         ################################################# ESP flashing
+
+        ################################################# Disk ID
+
+	# Given a /dev/sdfoo or /dev/hdfoo or /dev/nvmefoo,
+	# get the path from /dev/disk/by-id/foo
+	get-disk-id)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": require DISK argument >&2
+			exit 1
+		fi
+		DISK="$2"
+		"$0" ensure readlink || exit 1
+		:
+		NAME=`echo "$DISK" | sed -e 's@\([^/]*\)$@ \1@' | sed -e 's@^[^ ]* @@'`
+		for ID in /dev/disk/by-id/*; do
+			if test -L "$ID"; then
+				DEST=`readlink -e "$ID" | sed -e 's@\([^/]*\)$@ \1@' | sed -e 's@^[^ ]* @@'`
+				if test X"$DEST" '=' X"$NAME"; then
+					echo "$ID"
+					exit 0
+				fi
+			fi
+		done
+		exit 1
+		;;
+
+        ################################################# Disk ID
 
         ################################################# Main Menu
 
