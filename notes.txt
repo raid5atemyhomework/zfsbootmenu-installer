@@ -315,6 +315,25 @@ hibernation and getting out of it:
 
 ------------
 
+Slimbook OS
+
+Slimbook OS is just Ubuntu, straight up, but with an additional repository
+maintained by Slimbook devs, and some artwork branding changes as well as
+fixes for specific Slimbook devices.
+
+The thing is that the additional repository contains `slimbook-grub-foo-fix`
+packages, which, as the name suggests, modify the Grub configuration to
+add Linux command-line entries to fix various issues with Linux on Slimbook
+devices.
+As we are not using Grub, obviously we cannot actually get those
+modifications.
+
+Ideally, we should actually hook into the installation of packages that
+put files in `/etc/grub.d` and `/etc/default/grub.d` (Slimbook uses the
+latter) and scan them for `GRUB_CMDLINE_LINUX_DEFAULT` entries.
+
+------------
+
 Pop!_OS
 
 Pop!_OS doesn't have its own dedicated release codenames; it reuses the same
