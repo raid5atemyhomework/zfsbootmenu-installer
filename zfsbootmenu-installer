@@ -118,9 +118,8 @@ DESC
 
 			AddBootEnvironment)
 				cat <<DESC
-Add a Boot Environment to an existing ZFS Pool named
-'${TANK_NAME}' with a '${TANK_NAME}/ROOT' dataset, installing
-one supported distro:
+Add a new Boot Environment, installing one supported
+distro:
 
 DESC
 				"$0" distro list
