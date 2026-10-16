@@ -1097,39 +1097,67 @@ SCRIPT
 		exec update-initramfs -c -k all
 		;;
 
-	debian-derivative-install-chroot-make-user)
-		USERNAME="`cat /usr/local/username`"
-		echo "---- zfsbootmenu-installer: debian derivative: create user ${USERNAME}."
+	debian-derivative-install-chroot-make-groups-only)
+		echo "---- zfsbootmenu-installer: debian derivative: Make system groups."
 		addgroup --system lpadmin && \
 		addgroup --system lxd && \
-		addgroup --system sambashare && \
-		adduser --uid 1000 --disabled-password --comment "${USERNAME}" "${USERNAME}"
-		EXIT_CODE=$?
-		if test X$EXIT_CODE '!=' X0; then
-			exit $EXIT_CODE
-		fi
-		zfs mount $TANK_NAME/home
+		addgroup --system sambashare
+		exit $?
+		;;
+
+	debian-derivative-install-chroot-make-user-only)
+		USERNAME="`cat /usr/local/username`"
+		echo "---- zfsbootmenu-installer: debian derivative: create user ${USERNAME}."
+		exec adduser --uid 1000 --disabled-password --comment "${USERNAME}" "${USERNAME}"
+		;;
+
+	typical-install-chroot-juggle-home-dataset)
+		echo "---- zfsbootmenu-installer: typical: Mounting /home"
+		zfs mount $TANK_NAME/home || exit 1
 		# If the canmount property is not `on`,
 		# set it to `on` here while inside the
 		# chroot.
 		# This is necessary as the home dataset
 		# is first created with canmount=noauto
-		# during Initialize.
+		# during Initialize, in order to not
+		# override the /home of the Live CD.
 		if test "`zfs get -H canmount -o value $TANK_NAME/home`" '!=' on; then
-			zfs set canmount=on $TANK_NAME/home
+			zfs set canmount=on $TANK_NAME/home || exit 1
 		fi
+		exit 0
+		;;
+
+	typical-install-chroot-make-user-homedir-only)
+		USERNAME="`cat /usr/local/username`"
 		# If it already exists, don't mess with it!
 		if test -d /home/"${USERNAME}"; then
-			echo "---- zfsbootmenu-installer: NOT messing with /home/${USERNAME}"
+			echo "---- zfsbootmenu-installer: typical: /home/${USERNAME} exists, NOT messing with it."
 			sleep 1
-		else
+		# If there's a skel, copy it!
+		elif test -d /etc/skel; then
+			echo "---- zfsbootmenu-installer: typical: /etc/skel -> /home/${USERNAME}"
 			cp -a /etc/skel /home/"${USERNAME}"
 			if test '!' -d /home/"${USERNAME}"; then
 				echo "$0": Failed to create user homedir >&2
 				exit 1
 			fi
 			chown -R "${USERNAME}":"${USERNAME}" /home/"${USERNAME}"
+		# No skel, make empty homedir
+		else
+			echo "---- zfsbootmenu-installer: typical: No /etc/skel, making empty /home/${USERNAME}"
+			mkdir /home/"${USERNAME}"
+			if test '!' -d /home/"${USERNAME}"; then
+				echo "$0": Failed to create user homedir >&2
+				exit 1
+			fi
+			chown -R "${USERNAME}":"${USERNAME}" /home/"${USERNAME}"
 		fi
+		exit 0
+		;;
+
+	debian-derivative-install-chroot-make-user-admin-only)
+		USERNAME="`cat /usr/local/username`"
+		echo "---- zfsbootmenu-installer: debian derivative: ${USERNAME} is become admin, destroyer of systems"
 		# usermod seems missing on Trixie installs.
 		for GROUP in adm cdrom dip lpadmin lxd plugdev sambashare sudo; do
 			adduser "${USERNAME}" "${GROUP}"
@@ -1142,8 +1170,23 @@ SCRIPT
 		echo "${USERNAME} ALL=(ALL) NOPASSWD: ALL" >/etc/sudoers.d/"${USERNAME}"
 		chown root:root /etc/sudoers.d/"${USERNAME}"
 		chmod 400 /etc/sudoers.d/"${USERNAME}"
-		( printf '%s:' "${USERNAME}" && cat /etc/zfs/zroot.key ) | chpasswd
 		exit 0
+		;;
+
+	debian-derivative-install-chroot-make-user-password-only)
+		USERNAME="`cat /usr/local/username`"
+		echo "---- zfsbootmenu-installer: debian derivative: Setting ${USERNAME} password"
+		( printf '%s:' "${USERNAME}" && cat /etc/zfs/zroot.key ) | chpasswd
+		exit $?
+		;;
+
+	debian-derivative-install-chroot-make-user)
+		"$0" debian-derivative-install-chroot-make-groups-only || exit 1
+		"$0" debian-derivative-install-chroot-make-user-only || exit 1
+		"$0" typical-install-chroot-juggle-home-dataset || exit 1
+		"$0" typical-install-chroot-make-user-homedir-only || exit 1
+		"$0" debian-derivative-install-chroot-make-user-admin-only || exit 1
+		exec "$0" debian-derivative-install-chroot-make-user-password-only
 		;;
 
 	# Typical GNU/Linux systems
