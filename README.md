@@ -22,8 +22,8 @@ read ZFS Pools with older features, it installs
 [ZFSBootMenu](https://zfsbootmenu.org/), a specialized
 Root-on-ZFS bootloader, into the storage devices in your array.
 Not only can ZFSBootMenu read the latest features of ZFS, it can
-also write to the ZFS Pool: for example, to rollback a bad upgrade
-of your operating system.
+also write to the ZFS Pool: for example, it can rollback a bad
+upgrade of your operating system.
 
 `zfsbootmenu-installer` also has Secure Boot support, by using a
 Microsoft-signed [Fedora Shim](https://github.com/rhboot/shim)
@@ -42,9 +42,9 @@ The advantage of ZFSBootMenu is that in combination with snapshots,
 you no longer have to fear that updating your operating system
 will prevent you from booting up your computer.
 Even if an update manages to break your system enough that the
-kernel won't boot, ZFSBootMenu is capable of rolling back the OS's
-ZFS dataset to an older snapshot, hopefully one predating whatever
-it is that broke your OS.
+entire OS won't boot, ZFSBootMenu is capable of rolling back the
+OS's ZFS dataset to an older snapshot, hopefully one predating
+whatever it is that broke your OS.
 In fact, ZFSBootMenu is itself a (small) Linux OS all by itself,
 and can drop into a recovery shell that lets you emergency-manage
 your ZFS Pool.
@@ -178,11 +178,11 @@ ask you things like timezones, keyboard configurations, etc).
 
 Once the installation is finished, you can reboot the
 machine (remember to remove the Live CD USB).
-On a Secure Boot reboot from your disks, you will enter
-the "MOK Manager", where you will be asked to confirm the
-Machine Owner Key for your new machine.
-Do that and re-enter your password to install the Machine
-Owner Key, which will continue booting.
+Once rebooted, you will enter "MOK Management".
+Select "Enrol MOK", then "Continue" and enter your password
+to register your Machine Owner Key for your new machine.
+Then the machine will restart rebooting with the Machine
+Owner Key registered, and Secure Boot capable.
 
 Once you boot up into ZFSBootMenu and select your first
 Boot Environment, you can enter your password to unlock
@@ -195,6 +195,7 @@ distros.
 new system so that you can use it to install more
 GNU/Linux distros or prepare new disks to add or replace
 into the ZFS array.
+Remember it needs to be run as superuser.
 
 Manually Installing New Boot Environments
 -----------------------------------------
@@ -288,11 +289,20 @@ you can usually do something like:
     mok_certificate=/usr/local/mok/MOK.der
     SCRIPT
 
+Because you are relying on DKMS to automate signing
+of kernel modules, you should avoid precompiled,
+non-DKMS kernel modules from your distro, unless
+you know how to automate signing them with your own
+MOK (I don't, I can only find automation for DKMS
+kernel modules).
+
 For kernel signing, you need the distribution to
 have `sbsign` somewhere in its packaging --- on
 most Debian derivatives, it's in a package called
 `sbsigntool`.
-Install it, and only it, now.
+Install it, and only it, now (e.g. use
+`--no-install-recommends` with `apt` just to make
+sure you don't install anything else yet).
 Then you need to set up auto-signing of installed
 kernels.
 
@@ -323,7 +333,7 @@ In the worst case, you can look for post-install
 hooks for the package manager of the distribution,
 which trigger whenever any package is installed.
 Then you can install a post-install hook that
-invokes the following command as user:
+invokes the following command as superuser:
 
     /usr/local/bin/zfsbootmenu-installer sign-all-kernels
 
@@ -362,9 +372,10 @@ do:
 
 If the distro uses anything other than `systemd`
 for its Init system, then you're probably on your
-own to try figure out how ZFS does its magic
+own to try to figure out how ZFS does its magic
 under the hood, heh.
-You generally need to at least do the following:
+You generally need to at least set up the following
+in your Init system:
 
 * Run `modprobe zfs` as early as possible.
 * Run `zpool import -a` after `modprobe zfs`.
@@ -388,14 +399,14 @@ You generally need to at least do the following:
 * You also want to schedule regular `zpool scrub`
   and `zpool trim` on your `crontab` system.
 
-Finally, you really want `zfs-auto-snapshot`.
-On Debian deriviatives, this exists as a package
+Further, you really want `zfs-auto-snapshot`.
+On Debian derivatives, this exists as a package
 that is nice enough that it automatically sets up
-`crontab` entries for it, but the actual source
-code has no automatic set up for the `crontab`
-system, so other packagers might do the bare
-minimum and just put the scripts into the package
-without setting up `crontab` entries.
+`crontab` entries on installation, but the actual
+source code has no automatic set up for the
+`crontab` system, so other packagers might do the
+bare minimum and just put the scripts into the
+package without setting up `crontab` entries.
 In particular, the source for `zfs-auto-snapshot`
 has no `systemd` `.timer` files.
 Yes, ZFS's magic is implemented from actual bits
@@ -410,7 +421,14 @@ github:
 ...and also set up the `crontab` entries manually.
 
 Then once you've installed everything to your
-satisfaction for the new system, you can:
+satisfaction for the new system, you can do a
+final signing of kernels, since post-install
+hooks might not trigger within the `chroot`
+jail (DKMS usually does trigger):
+
+    /usr/local/bin/zfsbootmenu-installer sign-all-kernels
+
+And then you can:
 
     exit
 
