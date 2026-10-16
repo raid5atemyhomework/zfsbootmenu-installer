@@ -2197,7 +2197,7 @@ Installation will continue successfully regardless.
 				-o autotrim=on \
 				-o compatibility=openzfs-2.2 \
 				-m none $TANK_NAME \
-				`cat $WORKDIR/config/vdev`
+				`cat $WORKDIR/config/vdev` \
 				`cat $WORKDIR/config/parts`
 			EXIT_CODE=$?
 		fi
