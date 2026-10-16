@@ -248,8 +248,12 @@ DESC
 				PACKAGE=gawk
 				;;
 
-			blkdiscard|lsblk|wipefs)
+			blkdiscard|logger|lsblk|wipefs)
 				PACKAGE=util-linux
+				;;
+
+			df|readlink|sha256sum|sort|tail)
+				PACKAGE=coreutils
 				;;
 
 			iconv)
@@ -262,10 +266,6 @@ DESC
 
 			pacstrap)
 				PACKAGE=arch-install-scripts
-				;;
-
-			readlink|sha256sum|sort)
-				PACKAGE=coreutils
 				;;
 
 			sbsign|sbverify)
@@ -940,6 +940,23 @@ DESC
 		exit 0
 		;;
 
+	# Debian Derivative
+
+	# Installs our hooks to changes in the system.
+	debian-derivative-install-zbmi-hooks)
+		echo "---- zfsbootmenu-installer: typical: Enabling dpkg hooks for ZFSBootMenu and Secure Boot integration."
+		# Make sure df and tail are available
+		# since zbmi hooks use them.
+		apt -y --no-install-recommends coreutils || exit 1
+		"$0" zbmi-install-dpkg-post-hook || exit 1
+		"$0" mkdir-p /etc/dpkg/dpkg.cfg.d || exit 1
+		cat > /etc/dpkg/dpkg.cfg.d/zz-zbmi-dpkg-hooks <<CONFIG
+post-invoke=/usr/local/lib/zfsbootmenu-installer/dpkg-post-hook
+CONFIG
+		exec test -f /etc/dpkg/dpkg.cfg.d/zz-zbmi-dpkg-hooks
+		;;
+
+
 	debian-derivative-override-mok)
 		echo "---- zfsbootmenu-installer: debian derivative: Overriding distro MOKs"
 		# Ubuntu creates these /var/lib/shim-signed/mok/MOK.priv and MOK.der
@@ -1011,10 +1028,11 @@ SCRIPT
 		;;
 
 	debian-derivative-prepare)
-		echo "---- zfsbootmenu-installer: debian derivative: Preparing signing capabilities."
+		echo "---- zfsbootmenu-installer: debian derivative: Preparing package manager hooking and signing capabilities."
+		apt update && \
+		"$0" debian-derivative-install-zbmi-hooks && \
 		"$0" debian-derivative-override-mok && \
 		"$0" dkms-mok-auto-sign && \
-		apt update && \
 		apt install -y --no-install-recommends sbsigntool && \
 		"$0" debian-derivative-auto-sign-kernel
 		exit $?
@@ -1311,7 +1329,109 @@ SOURCES_LIST
 		"$0" typical-enable-auto-login
 		;;
 
+	# zfsbootmenu-installer hooks
+
+	# Hook this on adding a new file, or modifying
+	# a file, to the system:
+	# install, upgrade, downgrade
+	zbmi-post-new-hook)
+		# TODO find unsigned kernel modules and
+		# sign them with the MOK
+		exit 0
+		;;
+
+	# Hook this on a change in the system:
+	# install, upgrade, downgrade, uninstall
+	zbmi-post-change-hook)
+		exec "$0" follow-grub-cmdline-linux-default
+		;;
+
+	# Prints out a small shell script that only
+	# calls into zfsbootmenu-installer if DPKG is
+	# installing, removing, or purging.
+	# We use this instead of calling drectly into
+	# /usr/local/bin/zfsbootmenu-installer zbmi-post-add-hook et al
+	# so that other dpkg actions like
+	# configure etc do not require loading the
+	# 2000-line zfsbootmenu-installer
+	zbmi-print-dpkg-post-hook)
+		cat <<SCRIPT
+#! /bin/sh
+case \$DPKG_HOOK_ACTION in
+install)
+	/usr/local/bin/zfsbootmenu-installer zbmi-post-new-hook &&
+	/usr/local/bin/zfsbootmenu-installer zbmi-post-change-hook
+	exit \$?
+	;;
+
+remove|purge)
+	exec /usr/local/bin/zfsbootmenu-installer zbmi-post-change-hook
+	;;
+
+esac
+exit 0
+SCRIPT
+		;;
+
+	zbmi-install-dpkg-post-hook)
+		"$0" mkdir-p /usr/local/lib/zfsbootmenu-installer
+		"$0" zbmi-print-dpkg-post-hook > /usr/local/lib/zfsbootmenu-installer/dpkg-post-hook
+		chmod +x /usr/local/lib/zfsbootmenu-installer/dpkg-post-hook
+		exec test -x /usr/local/lib/zfsbootmenu-installer/dpkg-post-hook
+		;;
+
 	################################################# distro
+
+	################################################# Grub cmdline Linux Default
+
+	find-grub-cmdline-linux-default-core)
+		for DIR in /etc/grub.d /etc/default/grub.d; do
+			cd "$DIR"
+			for FILE in [0-9][0-9]_* *.cfg; do
+				# Nonexistent? Maybe posix-me-harder
+				# shell letting the * pass through
+				# when the dir is empty.
+				if test '!' -f $FILE; then
+					: # skip
+				else
+					grep '^[ 	]*GRUB_CMDLINE_LINUX_DEFAULT[ 	]*=[ 	]*"$GRUB_CMDLINE_LINUX_DEFAULT  *[^"]*"[ 	]*$' $FILE | \
+					sed -e 's@^[ 	]*GRUB_CMDLINE_LINUX_DEFAULT[ 	]*=[ 	]*"$GRUB_CMDLINE_LINUX_DEFAULT  *\([^"]*\)"[ 	]*$@\1@'
+				fi
+			done
+		done
+		;;
+
+	find-grub-cmdline-linux-default)
+		echo `"$0" find-grub-cmdline-linux-default-core`
+		;;
+
+	# Intended to be used in a package manager
+	# post-install hook.
+	# This changes the `org.zfsbootmenu:commandline`
+	# option of the currently mounted root dataset.
+	follow-grub-cmdline-linux-default)
+		MY_BE="`"$0" find-current-boot-environment`"
+		if test $? '!=' 0; then
+			"$0" ensure logger
+			logger --id=$$ --priority=user.warning 'zfsbootmenu-installer follow-grub-cmdline-linux-default: Unable to find our current boot environment'
+			exit 1
+		fi
+		if zfs list "$MY_BE" > /dev/null 2>&1; then :; else
+			"$0" ensure logger
+			logger --id=$$ --priority=user.warning 'zfsbootmenu-installer follow-grub-cmdline-linux-default: Current / is not a ZFS dataset'
+			exit 1
+		fi
+		CMDLINE="`"$0" find-grub-cmdline-linux-default`"
+		SETTING='%{parent} '"$CMDLINE"
+		CUR_SETTING="`zfs get -H -o value org.zfsbootmenu:commandline $MY_BE`"
+		if test X"$CUR_SETTING" '!=' X"$SETTING"; then
+			zfs set org.zfsbootmenu:commandline="$SETTING" "$MY_BE"
+			logger --id=$$ --priority=user.debug "zfsbootmenu-installer follow-grub-cmdline-linux-default: Linux commandline for $MY_BE changed to $CMDLINE"
+		fi
+		exit 0
+		;;
+
+	################################################# Grub cmdline Linux Default
 
         ################################################# install Boot Environment
 
@@ -2303,7 +2423,7 @@ Installation will continue successfully regardless.
 
         ################################################# Disk formatting
 
-        ################################################# Boot Environment
+	################################################# Boot Environment
 
 	list-boot-environments)
 		# List the bootfs first if it is a valid
@@ -2351,7 +2471,19 @@ Installation will continue successfully regardless.
 		exit 0
 		;;
 
-        ################################################# Boot Environment
+	# Determine which boot environment is the
+	# currently booted one.
+	find-current-boot-environment)
+		"$0" ensure df
+		"$0" ensure tail
+		# The nice thing about using
+		# df here is that it works even
+		# in a chroot jail.
+		df --output=source / | tail -n 1
+		exit $?
+		;;
+
+	################################################# Boot Environment
 
         ################################################# Main Menu
 

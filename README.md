@@ -337,9 +337,27 @@ invokes the following command as superuser:
 
     /usr/local/bin/zfsbootmenu-installer sign-all-kernels
 
+There's also two more things you want to somehow
+invoke when your package manager changes your
+system:
+
+* `/usr/local/bin/zfsbootmenu-installer zbmi-post-new-hook`
+  - Invoke this every time the package manager adds a new
+    file to the system, or overwrites a file with new
+    contents.
+* `/usr/local/bin/zfsbootmenu-installer zbmi-post-change-hook`
+  - Invoke this every time the package manager adds, modifies,
+    or removes files from the system.
+
+On a Debian derivative that uses `dpkg`/`apt`,
+the below installs both hooks into `dpkg`:
+
+    /usr/local/bin/zfsbootmenu-installer debian-derivative-install-zbmi-hooks
+
 Once you have automatic signing of kernels and
-kernel modules, you can start installing the
-rest of the system you want to boot.
+kernel modules, and hooked the two calls above,
+you can start installing the rest of the system
+you want to boot.
 
 At minimum you need a Linux kernel, and
 you will need to also install ZFS for that Linux
