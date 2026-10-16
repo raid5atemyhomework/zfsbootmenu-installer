@@ -947,7 +947,7 @@ DESC
 		echo "---- zfsbootmenu-installer: typical: Enabling dpkg hooks for ZFSBootMenu and Secure Boot integration."
 		# Make sure df and tail are available
 		# since zbmi hooks use them.
-		apt -y --no-install-recommends coreutils || exit 1
+		apt install -y --no-install-recommends coreutils || exit 1
 		"$0" zbmi-install-dpkg-post-hook || exit 1
 		"$0" mkdir-p /etc/dpkg/dpkg.cfg.d || exit 1
 		cat > /etc/dpkg/dpkg.cfg.d/zz-zbmi-dpkg-hooks <<CONFIG
