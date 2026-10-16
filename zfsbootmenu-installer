@@ -231,8 +231,8 @@ DESC
 			# For tools whose package has
 			# different names depending on
 			# distro, we could do:
-			#      apt -y distro1-package > /dev/null 2>&1
-			#      apt -y package-distro2 > /dev/null 2>&1
+			#      apt install -y distro1-package > /dev/null 2>&1
+			#      apt install -y package-distro2 > /dev/null 2>&1
 			#      if which "$TOOL" > /dev/null 2>&1; then
 			#          exit 0
 			#      else
@@ -362,6 +362,86 @@ DESC
 		KEYRING=$2
 		ASC=$3
 		case $KEYRING in
+		packages.mozilla.org)
+			cat > $ASC <<KEYRING
+-----BEGIN PGP PUBLIC KEY BLOCK-----
+
+xsBNBGCRt7MBCADkYJHHQQoL6tKrW/LbmfR9ljz7ib2aWno4JO3VKQvLwjyUMPpq
+/SXXMOnx8jXwgWizpPxQYDRJ0SQXS9ULJ1hXRL/OgMnZAYvYDeV2jBnKsAIEdiG/
+e1qm8P4W9qpWJc+hNq7FOT13RzGWRx57SdLWSXo0KeY38r9lvjjOmT/cuOcmjwlD
+T9XYf/RSO+yJ/AsyMdAr+ZbDeQUd9HYJiPdI04lGaGM02MjDMnx+monc+y54t+Z+
+ry1WtQdzoQt9dHlIPlV1tR+xV5DHHsejCZxu9TWzzSlL5wfBBeEz7R/OIzivGJpW
+QdJzd+2QDXSRg9q2XYWP5ZVtSgjVVJjNlb6ZABEBAAHNVEFydGlmYWN0IFJlZ2lz
+dHJ5IFJlcG9zaXRvcnkgU2lnbmVyIDxhcnRpZmFjdC1yZWdpc3RyeS1yZXBvc2l0
+b3J5LXNpZ25lckBnb29nbGUuY29tPsLAjgQTAQoAOBYhBDW6oLM+nrOW9ZyoOMC6
+XObcYxWjBQJgkbezAhsDBQsJCAcCBhUKCQgLAgQWAgMBAh4BAheAAAoJEMC6XObc
+YxWj+igIAMFh6DrAYMeq9sbZ1ZG6oAMrinUheGQbEqe76nIDQNsZnhDwZ2wWqgVC
+7DgOMqlhQmOmzm7M6Nzmq2dvPwq3xC2OeI9fQyzjT72deBTzLP7PJok9PJFOMdLf
+ILSsUnmMsheQt4DUO0jYAX2KUuWOIXXJaZ319QyoRNBPYa5qz7qXS7wHLOY89IDq
+fHt6Aud8ER5zhyOyhytcYMeaGC1g1IKWmgewnhEq02FantMJGlmmFi2eA0EPD02G
+C3742QGqRxLwjWsm5/TpyuU24EYKRGCRm7QdVIo3ugFSetKrn0byOxWGBvtu4fH8
+XWvZkRT+u+yzH1s5yFYBqc2JTrrJvRU=
+=QnvN
+-----END PGP PUBLIC KEY BLOCK-----
+KEYRING
+			;;
+
+		slimbook)
+			cat > $ASC <<KEYRING
+-----BEGIN PGP PUBLIC KEY BLOCK-----
+
+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
+=UOno
+-----END PGP PUBLIC KEY BLOCK-----
+KEYRING
+		;;
+
 		ubuntu-archive-keyring)
 			cat > $ASC <<KEYRING
 -----BEGIN PGP PUBLIC KEY BLOCK-----
@@ -769,6 +849,7 @@ README
 Ubuntu26.04
 KUbuntu26.04
 Debian13
+SlimbookOS26
 DISTROS
 			exit 0
 		fi
@@ -930,6 +1011,42 @@ DESC
 						"$0" debian-install-chroot trixie && \
 						apt install -y firmware-linux-nonfree
 						exit $?
+						;;
+
+				esac
+				;;
+
+			SlimbookOS26)
+				case "$SUBCOMMAND" in
+					preview)
+						cat <<DESC
+Slimbook OS 26
+
+Slimbook OS is an Ubuntu LTS, with an additional
+repository from Slimbook containing fixes,
+drivers, branding, and tools for Slimbook laptops
+and computers.
+
+Comes with the Hardware Enablement kernel, which
+is newer than typical kernels in order to better
+support new Slimbook hardware.
+
+This will automatically detect a Slimbook device
+and install Slimbook fixes and drivers for it.
+
+Installed with Ubuntu Desktop with significant
+Slimbook branding.
+DESC
+						;;
+
+					install-outside)
+						echo "---- zfsbootmenu-installer: Installing SlimbookOS26"
+						exec "$0" slimbook-install-outside resolute 26 "$DIR"
+						;;
+
+					install-chroot)
+						echo "---- zfsbootmenu-installer: Installing SlimbookOS26 (in chroot)"
+						exec "$0" slimbook-install-chroot resolute 26
 						;;
 
 				esac
@@ -1375,6 +1492,233 @@ SOURCES_LIST
 		fi
 		tasksel
 		"$0" typical-enable-auto-login
+		exit $?
+		;;
+
+	# Slimbook OS
+
+	slimbook-install-outside)
+		if test X${4+set} '!=' Xset; then
+			echo "$0": Need RELEASE YEAR DIR arguments >&2
+			exit 1
+		fi
+		RELEASE="$2"
+		YEAR="$3"
+		DIR="$4"
+
+		# Are we already running inside a
+		# ZFSBootMenu-managed Boot
+		# Environment?
+		BE="`"$0" find-current-boot-environment`"
+		EXIT_CODE=$?
+		if test $EXIT_CODE '=' 0 && zfs list "$BE" > /dev/null 2>&1; then
+			whiptail --msgbox 'You are adding SlimbookOS '"$YEAR"' as a new Boot Environment.
+
+Unfortunately, Slimbook OS achieves part of its look by
+writing specific files to your /home directory.  Since
+/home is shared between Boot Environments, this may cause
+issues if you are currently using Gnome Shell or Ubuntu
+Desktop, and the changes will also change the look of
+other Boot Environments using Gnome Shell / Ubuntu
+Desktop.  For this reason, we will not change your /home
+directory at all.
+
+To achieve the Slimbook OS look, install these Gnome
+Shell extensions (doing so will affect your /home and
+thus all Boot Environments using Gnome Shell / Ubuntu
+Desktop):
+
+    Dash To Panel
+    Lock Keys
+    Status Area Horizontal Spacing
+' 0 0
+		fi
+
+		"$0" ensure debootstrap || exit 1
+		"$0" keyring ubuntu-archive-keyring || exit 1
+		debootstrap --keyring $WORKDIR/keyring.gpg $RELEASE "$DIR" || exit 1
+		rm -rf $WORKDIR/keyring.gpg > /dev/null 2>&1
+
+		echo "---- zfsbootmenu-installer: Add Slimbook keyring."
+		"$0" keyring slimbook || exit 1
+		"$0" mkdir-p "$DIR"/etc/apt/trusted.gpg.d || exit 1
+		mv $WORKDIR/keyring.gpg "$DIR"/etc/apt/trusted.gpg.d/slimbook.gpg || exit 1
+		chmod 644 "$DIR"/etc/apt/trusted.gpg.d/slimbook.gpg
+
+		echo "---- zfsbootmenu-installer: Add Mozilla keyring."
+		"$0" mkdir-p "$DIR"/etc/apt/keyrings || exit 1
+		"$0" keyring-asc packages.mozilla.org "$DIR"/etc/apt/keyrings/packages.mozilla.org.asc || exit 1
+		chmod 644 "$DIR"/etc/apt/keyrings/packages.mozilla.org.asc
+
+		exit $?
+		;;
+
+	slimbook-sources)
+		if test X${3+set} '!=' Xset; then
+			echo "$0": Need RELEASE YEAR arguments >&2
+			exit 1
+		fi
+		RELEASE="$2"
+		YEAR="$3"
+		"$0" mkdir-p /etc/apt/sources.list.d || exit 1
+		"$0" mkdir-p /etc/apt/preferences.d || exit 1
+		# Yeah down with snap
+		cat > /etc/apt/sources.list.d/mozilla.sources <<SOURCES
+Types: deb
+URIs: https://packages.mozilla.org/apt/
+Suites: mozilla
+Components: main
+Signed-By: /etc/apt/keyrings/packages.mozilla.org.asc
+SOURCES
+		cat > /etc/apt/preferences.d/mozilla <<SOURCES
+Package: *
+Pin: origin packages.mozilla.org
+Pin-Priority: 1000
+
+Package: firefox*
+Pin: release o=Ubuntu
+Pin-Priority: -1
+SOURCES
+
+		cat > /etc/apt/sources.list.d/slimbook.sources <<SOURCES
+Types: deb
+URIs: https://archive.slimbook.com/$YEAR/
+Suites: slimbookos
+Components: main
+Signed-By: /etc/apt/trusted.gpg.d/slimbook.gpg
+
+Types: deb
+URIs: https://archive.slimbook.com/$YEAR/
+Suites: slimbookos-updates
+Components: main
+Signed-By: /etc/apt/trusted.gpg.d/slimbook.gpg
+
+Types: deb
+URIs: https://archive.slimbook.com/$YEAR/
+Suites: slimbookos-security
+Components: main
+Signed-By: /etc/apt/trusted.gpg.d/slimbook.gpg
+SOURCES
+		"$0" ubuntu-sources-list "$RELEASE"
+		;;
+
+	# Install additional early packages
+	slimbook-install-chroot-addl-early)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": requires YEAR argument >&2
+			exit 1
+		fi
+		YEAR="$2"
+		echo "---- zfsbootmenu-installer: Ubuntu -> SlimbookOS"
+		# In particular this replaces os-release
+		exec apt install -y slimbook-base-files slimbook-default-skel
+		;;
+
+	# Install additional packages
+	# This should come before *-make-user
+	# since they heavily modify /etc/skel
+	slimbook-install-chroot-addl)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": requires YEAR argument >&2
+			exit 1
+		fi
+		YEAR="$2"
+		echo "---- zfsbootmenu-installer: Install SlimbookOS packages."
+		# This overwrites the keys we added, so confirm
+		# yes, we want to overwrite.
+		yes | apt install -y slimbook-keyring
+		if test $? '!=' 0; then
+			exit 1
+		fi
+		case $YEAR in
+		26)
+			apt install -y slimbook-gnome-background-$YEAR || exit 1
+			;;
+
+		esac
+		exec apt install -y \
+			firefox \
+			libslimbook1 mission-center \
+			slimbook-firefox-defaults slimbook-gnome-settings \
+			slimbook-gnome-background slimbook-meta-common \
+			slimbook-meta-gnome slimbook-plymouth-theme \
+			slimbook-service slimbook-ttf-fonts \
+			ubuntu-desktop-minimal ubuntu-minimal
+		;;
+
+	# Detect the Slimbook device model and install
+	# corresponding packages.
+	slimbook-install-chroot-device-specific)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": requires YEAR argument >&2
+			exit 1
+		fi
+		YEAR="$2"
+		FAMILY="`slimbookctl info | grep '^[ 	]*family:' | sed -e 's@^[ 	]*family:[ 	]*@@'`"
+		echo "---- zfsbootmenu-installer: Slimbook drivers and fixes: family: $FAMILY"
+		case $FAMILY in
+		elemental)
+			exec apt install -y slimbook-meta-essential
+			;;
+
+		titan)
+			exec apt install -y slimbook-meta-hero
+			;;
+
+		creative|evo|excalibur|executive|hero-s|nas|one|prox|zero)
+			exec apt install -y  slimbook-meta-$FAMILY
+			;;
+
+		*)
+			echo "---- zfsbootmenu-installer: Not recognized as Slinbook device."
+			;;
+
+		esac
+		exit 0
+		;;
+
+	# Core Slimbook OS installation.
+	slimbook-install-chroot)
+		if test X${3+set} '!=' Xset; then
+			echo "$0": Need RELEASE YEAR arguments >&2
+			exit 1
+		fi
+		RELEASE="$2"
+		YEAR="$3"
+		case $YEAR in
+		26)
+			KERNEL=linux-generic-hwe-$YEAR.04
+			;;
+
+		*)
+			echo "$0": Unrecognized YEAR: $YEAR >&2
+			exit 1
+			;;
+
+		esac
+		"$0" slimbook-sources "$RELEASE" "$YEAR" && \
+		"$0" debian-derivative-prepare && \
+		"$0" slimbook-install-chroot-addl-early "$YEAR" && \
+		apt install -y --no-install-recommends $KERNEL && \
+		"$0" debian-derivative-install-chroot-basics
+		EXIT_CODE=$?
+		if test $EXIT_CODE '!=' 0; then
+			exit $EXIT_CODE
+		fi
+
+		"$0" debian-derivative-install-chroot-more && \
+		"$0" debian-derivative-install-chroot-zfs-support && \
+		"$0" debian-derivative-install-chroot-zfs-config && \
+		"$0" slimbook-install-chroot-addl "$YEAR" && \
+		"$0" debian-derivative-install-chroot-make-user
+		EXIT_CODE=$?
+		if test $EXIT_CODE '!=' 0; then
+			exit $EXIT_CODE
+		fi
+
+		"$0" slimbook-install-chroot-device-specific "$YEAR" && \
+		"$0" typical-enable-auto-login
+		exit $?
 		;;
 
 	# zfsbootmenu-installer hooks
