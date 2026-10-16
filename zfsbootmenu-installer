@@ -252,6 +252,10 @@ DESC
 				PACKAGE=util-linux
 				;;
 
+			cracklib-check)
+				PACKAGE=cracklib-runtime
+				;;
+
 			df|readlink|sha256sum|sort|tail)
 				PACKAGE=coreutils
 				;;
@@ -1898,6 +1902,7 @@ DANGER
 	# asks what the user wants.
 	initialize-interview)
 		"$0" mkdir-p $WORKDIR/config || exit 1
+		"$0" ensure cracklib-check || exit 1
 		"$0" ensure grep || exit 1
 		"$0" ensure whiptail || exit 1
 
@@ -1959,11 +1964,26 @@ Spaces are not allowed.' 0 0
 		if test $? '!=' 0; then
 			exit 1
 		fi
+
+		# ZFS requires at least 8 bytes
 		LEN=`cat $WORKDIR/config/zroot.key | wc --bytes`
 		if test $LEN -lt 8; then
 			whiptail --msgbox 'Password must be at least 8 characters!' 0 0
 			exec "$0" initialize-interview-password
 		fi
+
+		# Check against cracklib, otherwise PAM pam_unix will
+		# complain later in the actual installation.
+		cat $WORKDIR/config/zroot.key | cracklib-check > $WORKDIR/config/cracklib-whine
+		if grep ': OK$' $WORKDIR/config/cracklib-whine > /dev/null 2>&1; then :; else
+			# Not OK.
+			COMPLAINT="`cat $WORKDIR/config/cracklib-whine | grep -o ':[^:]*$'`"
+			rm -rf $WORKDIR/config/cracklib-whine > /dev/null 2>&1
+			whiptail --msgbox 'Password insecure'"$COMPLAINT" 0 0
+			exec "$0" initialize-interview-password
+		fi
+		rm -rf $WORKDIR/config/cracklib-whine > /dev/null 2>&1
+
 		whiptail --title 'Re-enter same password' --passwordbox "XXXXXXXXXXXXXXXXXXX" 0 0 '' 2> $WORKDIR/config/zroot2.key
 		if test $? '!=' 0; then
 			exit 1
@@ -2661,7 +2681,7 @@ fi
 
 if which fzf > /dev/null 2>&1; then :; else
 	echo "---- zfsbootmenu-installer: Installing needed tools"
-	if "$0" ensure fzf && "$0" ensure whiptail && "$0" ensure wget; then :; else
+	if "$0" ensure fzf && "$0" ensure whiptail && "$0" ensure wget && "$0" ensure cracklib-check; then :; else
 		echo "$0": Unable to ensure needed tools >&2
 		exit 1
 	fi
