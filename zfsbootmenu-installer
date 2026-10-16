@@ -2428,8 +2428,12 @@ else
 	MAINMENU='Exit\nAbout\nInitialize\n'
 fi
 
-if "$0" ensure fzf; then :; else
-	echo "$0": Unable to ensure needed tool fzf >&2
+if which fzf; then :; else
+	echo "---- zfsbootmenu-installer: Installing needed tools"
+	if "$0" ensure fzf && "$0" ensure whiptail && "$0" ensure wget; then :; else
+		echo "$0": Unable to ensure needed tools >&2
+		exit 1
+	fi
 fi
 FZF_DEFAULT_COMMAND=
 FZF_DEFAULT_OPTS=
