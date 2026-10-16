@@ -2304,6 +2304,56 @@ Installation will continue successfully regardless.
 
         ################################################# Disk formatting
 
+        ################################################# Boot Environment
+
+	list-boot-environments)
+		# List the bootfs first if it is a valid
+		# dataset.
+		BOOTFS="`zpool get bootfs -o value -H $TANK_NAME`"
+		if zfs list "$BOOTFS" > /dev/null 2>&1; then
+			echo "$BOOTFS"
+		fi
+		BOOTFS_NAME=`echo "$BOOTFS" | sed -e 's@\([^/]*\)$@ \1@' | sed -e 's@^[^ ]* @@'`
+		# Otherwise sort alphabetically and filter
+		# out the base $TANK_NAME/ROOT dataset.
+		zfs list -s name -t filesystem -H -d 1 -o name $TANK_NAME/ROOT | \
+			sed -e '/^'"$TANK_NAME"'\/ROOT\/'"$BOOTFS_NAME"'$/ d' | \
+			sed -e '/^'"$TANK_NAME"'\/ROOT$/ d'
+		exit 0
+		;;
+
+	preview-boot-environment)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": requires BE argument >&2
+			exit 1
+		fi
+		BE="$2"
+		echo $BE; echo
+		printf 'Created: '; zfs get -H -o value creation "$BE"
+		printf 'Used: '; zfs get -H -o value used "$BE"
+		if test X"`zpool get -H -o value bootfs $TANK_NAME`" '=' X"$BE"; then
+			echo
+			echo This is the current default Boot Environment.
+		fi
+		if test X"`zfs get -H -o value mounted "$BE"`" '=' Xyes; then
+			echo
+			echo You are running in this Boot Environment.
+		fi
+		exit 0
+		;;
+
+	select-boot-environment)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": requires REASON argument >&2
+			exit 1
+		fi
+		REASON=$2
+		"$0" list-boot-environments | fzf --layout=reverse-list --no-sort --no-input --border --border-label='Select Boot Environment '"$REASON" --preview="$0"' preview-boot-environment {}'
+		exit 0
+		;;
+
+        ################################################# Boot Environment
+
         ################################################# Main Menu
 
 	Initialize)
@@ -2340,8 +2390,14 @@ Installation will continue successfully regardless.
 		;;
 
 	ChangeDefaultBoot)
-		echo "$0": Not yet implemented >&2
-		exit 1
+		NEWBOOTFS=`"$0" select-boot-environment 'to set as default'`
+		if zfs list "$NEWBOOTFS" > /dev/null 2>&1; then :; else
+			echo "---- zfsbootmenu-installer: ChangeDefaultBoot: cancelled"
+			exit 0
+		fi
+		zpool set bootfs="$NEWBOOTFS" $TANK_NAME
+		echo "---- zfsbootmenu-installer: ChangeDefaultBoot: Default set to $NEWBOOTFS"
+		exit 0
 		;;
 
 	ReflashESP)
