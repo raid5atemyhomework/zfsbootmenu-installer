@@ -334,9 +334,10 @@ DESC
 		rm -rf $WORKDIR/keyring.gpg $WORKDIR/gnupg > /dev/null 2>&1
 
 		"$0" mkdir-p $WORKDIR/gnupg || exit 1
+		chmod 700 $WORKDIR/gnupg
 
 		"$0" keyring-asc $KEYRING $WORKDIR/keyring.asc || exit 1
-		gpg --keyring $WORKDIR/keyring.gpg --no-default-keyring \
+		gpg --keyring gnupg-ring:$WORKDIR/keyring.gpg --no-default-keyring \
 			--homedir $WORKDIR/gnupg \
 			--import $WORKDIR/keyring.asc
 		EXIT_CODE=$?
