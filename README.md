@@ -460,18 +460,7 @@ set up the new root dataset for boot:
 Then try booting into it and see if it works!
 
 If it doesn't, you can boot one of the other,
-known-working Boot Environments and then:
-
-    mkdir -p /work
-    zfs set mountpoint=/work zroot/ROOT/DistroName
-    zfs mount zroot/ROOT/DistroName
-    mount -t proc proc /work/proc
-    mount -t sysfs sys /work/sys
-    mount -B /dev/ /work/dev
-    mount -t devpts pts /work/dev/pts
-    chroot /work /bin/bash
-
-And try to debug from there.
-Remember to unmount, then put back the
-`mountpoint` property to `/` to re-enable booting
-from that dataset.
+known-working Boot Environments and then use
+`zfsbootmenu-installer`'s
+`ChrootIntoBootEnvironment` to get a shell
+into that Boot Environment.

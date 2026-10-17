@@ -150,6 +150,20 @@ increase the pool's capacity.
 DESC
 				;;
 
+			ChrootIntoBootEnvironment)
+				cat <<DESC
+Temporarily mount another Boot Environment and run a
+chroot shell inside it.
+
+While inside the shell, its mountpoint will be
+legacy and it will be unbootable if you force
+turning off the running Boot Environment.
+
+On normal exit, it will be unmounted and its
+mountpoint returned to normal /
+DESC
+				;;
+
 			Exit)
 				cat <<DESC
 Exit this tool.
@@ -2025,6 +2039,7 @@ SOURCES
 	# inside DKMS.
 	iso-debian-derivative-install-chroot-pre-zfs-dkms)
 		# Most LiveCDs use casper.  Disable it.
+		# If these error, it's fine, we ignore it.
 		systemctl disable casper-md5check.service > /dev/null 2>&1
 		systemctl disable casper.service > /dev/null 2>&1
 
@@ -3504,6 +3519,44 @@ Installation will continue successfully regardless.
 		exit $EXIT_CODE
 		;;
 
+	ChrootIntoBootEnvironment)
+		BE=`"$0" select-boot-environment 'to chroot into'`
+		if zfs list "$BE" > /dev/null 2>&1; then :; else
+			echo "---- zfsbootmenu-installer: ChrootIntoBootEnvironment: cancelled"
+			exit 0
+		fi
+		if test X"`zfs get -H -o value mounted $BE`" '=' Xyes; then
+			echo "---- zfsbootmenu-installer: ChrootIntoBootEnvironment: Already mounted: $BE"
+			exit 1
+		fi
+		echo "---- zfsbootmenu-installer: ChrootIntoBootEnvironment: $BE"
+		"$0" mkdir-p $WORKDIR/mnt || exit 1
+		zfs set mountpoint=legacy $BE
+		mount -t zfs $BE $WORKDIR/mnt
+		if test $? '!=' 0; then
+			echo "$0": Could not mount >&2
+			umount -qnR $WORKDIR/mnt
+			rm -rf $WORKDIR
+			exit 1
+		fi
+
+		"$0" chroot-into-mnt
+
+		umount -qnR $WORKDIR/mnt
+		zfs set mountpoint=/ $BE
+		rm -rf $WORKDIR
+		exit 0
+		;;
+
+	chroot-into-mnt)
+		# Find a shell
+		for SHELL in /bin/bash /usr/bin/bash /bin/fish /usr/bin/fish /bin/dash /usr/bin/dash /bin/sh; do
+			if test -x $WORKDIR/mnt$SHELL; then
+				exec chroot $WORKDIR/mnt $SHELL
+			fi
+		done
+		;;
+
         ################################################# Main Menu
 
 	*)
@@ -3535,7 +3588,7 @@ ERR
 fi
 
 if "$0" detect-installed; then
-	MAINMENU='Exit\nAbout\nAddBootEnvironment\nChangeDefaultBoot\nReflashESP\nPrepareNewDisk\n'
+	MAINMENU='Exit\nAbout\nAddBootEnvironment\nChangeDefaultBoot\nReflashESP\nPrepareNewDisk\nChrootIntoBootEnvironment\n'
 else
 	MAINMENU='Exit\nAbout\nInitialize\n'
 fi
@@ -3559,7 +3612,7 @@ export FZF_API_KEY
 SEL=`printf "$MAINMENU" | fzf --layout=reverse-list --no-sort --no-input --border --border-label='zfsbootmenu-installer '"$VERSION"' Main Menu'  --preview="$0"' preview-mainmenu {}'`
 
 case $SEL in
-	Initialize|AddBootEnvironment|ChangeDefaultBoot|ReflashESP|PrepareNewDisk)
+	Initialize|AddBootEnvironment|ChangeDefaultBoot|ReflashESP|PrepareNewDisk|ChrootIntoBootEnvironment)
 		;;
 
 	*)
