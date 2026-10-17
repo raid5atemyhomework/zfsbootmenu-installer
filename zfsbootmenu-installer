@@ -1107,7 +1107,11 @@ CONFIG
 	dkms-mok-auto-sign)
 		echo "---- zfsbootmenu-installer: DKMS: setup kernel module autosign"
 		"$0" mkdir-p /etc/dkms/framework.conf.d || exit 1
+		# Newer DKMS will NOT sign in a chroot unless
+		# `try_sign_modules=true`.
+		# Older DKMS should ignore the setting, I hope.
 		cat > /etc/dkms/framework.conf.d/00-0-sign-with-mok.conf <<FILE
+try_sign_modules=true
 mok_signing_key=/usr/local/mok/MOK.priv
 mok_certificate=/usr/local/mok/MOK.der
 FILE
