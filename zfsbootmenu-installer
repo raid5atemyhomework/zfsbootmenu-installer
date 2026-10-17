@@ -284,6 +284,10 @@ DESC
 				PACKAGE=udev
 				;;
 
+			unsquashfs)
+				PACKAGE=squashfs-tools
+				;;
+
 			xz)
 				PACKAGE=xz-utils
 				;;
@@ -1801,6 +1805,138 @@ SCRIPT
 		;;
 
 	################################################# distro
+
+	################################################# ISO-squashfs Install support
+
+	# Download an ISO and validate it
+	# against a keyring embedded in
+	# this script.
+	# If validation succeeds, leaves
+	# the file: $WORKDIR/installer.iso
+	iso-download-validate)
+		if test X"${6+set}" '!=' Xset; then
+			echo "$0": requires KEYRING ISO_URL ISO_BASENAME SHA256_URL SHA256_SIGN_URL >&2
+			exit 1
+		fi
+		KEYRING="$2"
+		ISO_URL="$3"
+		ISO_BASENAME="$4"
+		SHA256_URL="$5"
+		SHA256_SIGN_URL="$6"
+		"$0" ensure gpg || exit 1
+		"$0" ensure sha256sum || exit 1
+
+		"$0" mkdir-p $WORKDIR/iso || exit 1
+		rm -rf $WORKDIR/iso/* $WORKDIR/installer.iso > /dev/null 2>&1
+
+		echo "---- zfsbootmenu-installer: Downloading $ISO_BASENAME..."
+		wget "$ISO_URL" --output-document=$WORKDIR/iso/"$ISO_BASENAME" || exit 1
+		wget --no-verbose "$SHA256_URL" --output-document=$WORKDIR/iso/sha256 || exit 1
+		wget --no-verbose "$SHA256_SIGN_URL" --output-document=$WORKDIR/iso/sha256.sig || exit 1
+
+		if test '!' -f $WORKDIR/iso/"$ISO_BASENAME" || \
+				test '!' -f $WORKDIR/iso/sha256 || \
+				test '!' -f $WORKDIR/iso/sha256.sig; then
+			echo "$0": Downloading failed >&2
+			exit 1
+		fi
+
+		echo "---- zfsbootmenu-installer: Validating $ISO_BASENAME"
+		"$0" keyring "$KEYRING" || exit 1
+		"$0" mkdir-p $WORKDIR/gnupg || exit 1
+		chmod 700 $WORKDIR/gnupg
+
+		gpg --keyring gnupg-ring:$WORKDIR/keyring.gpg --no-default-keyring \
+			--homedir $WORKDIR/gnupg \
+			--verify \
+				$WORKDIR/iso/sha256.sig \
+				$WORKDIR/iso/sha256
+		if test $? '!=' 0; then
+			echo "$0": Failed to validate signature for checksum file: $ISO_BASENAME >&2
+			exit 1
+		fi
+		# Since we will use --ignore-missing, make
+		# absolutely sure the ISO file is included
+		# in the sha256 file.
+		grep -F "$ISO_BASENAME" $WORKDIR/iso/sha256 > /dev/null 2>&1
+		if test $? '!=' 0; then
+			echo "$0": Failed to see "$ISO_BASENAME" in checksum file >&2
+			exit 1
+		fi
+		cd $WORKDIR/iso
+		cat ./sha256 | sha256sum -c --ignore-missing
+		if test $? '!=' 0; then
+			echo "$0": "$ISO_BASENAME" checksum validation failed >&2
+			exit 1
+		fi
+		cd $WORKDIR
+
+		# We are good!
+		mv $WORKDIR/iso/"$ISO_BASENAME" $WORKDIR/installer.iso
+		rm -rf $WORKDIR/iso $WORKDIR/gnupg $WORKDIR/keyring.gpg > /dev/null 2>&1
+		echo "---- zfsbootmenu-installer: $ISO_BASENAME downloaded and valid!"
+
+		exit 0
+		;;
+
+	# Copies out files from
+	# $WORKDIR/installer.iso
+	# First arg is the directory inside the ISO
+	# to extract from, followed by all the
+	# files to extract from that directory.
+	# The files are put in the directory
+	# $WORKDIR/prepare
+	iso-extract-from-installer)
+		if test X"${3+set}" '!=' Xset; then
+			echo "$0": requires SUBDIR FILE... arguments >&2
+			exit 1
+		fi
+		if test '!' -f $WORKDIR/installer.iso; then
+			echo "$0": No installer.iso >&2
+			exit 1
+		fi
+		SUBDIR="$2"
+		shift; shift
+		"$0" mkdir-p $WORKDIR/mnt || exit 1
+		"$0" mkdir-p $WORKDIR/prepare || exit 1
+
+		echo "---- zfsbootmenu-installer: Extracting from installer ISO"
+		mount -o loop $WORKDIR/installer.iso $WORKDIR/mnt || exit 1
+		for FILE in "$@"; do
+			cp $WORKDIR/mnt/"$SUBDIR"/"$FILE" $WORKDIR/prepare/"$FILE"
+			if test '!' -f $WORKDIR/prepare/"$FILE"; then
+				umount -qnR $WORKDIR/mnt > /dev/null 2>&1
+				echo "$0": Failed to get "$SUBDIR"/"$FILE" >&2
+				exit 1
+			fi
+		done
+		umount -qnR $WORKDIR/mnt > /dev/null 2>&1
+		exit 0
+		;;
+
+	# Unsquashes the squashfs directly into
+	# the given directory.
+	iso-unsquash)
+		if test X"${3+set}" '!=' Xset; then
+			echo "$0": requires SUBDIR FILE... arguments >&2
+			exit 1
+		fi
+		SQUASHFS="$2"
+		DIR="$3"
+		if test '!' -d "$DIR"; then
+			echo "$0": Expect $DIR to be directory >&2
+			exit 1
+		fi
+		if test '!' -f $WORKDIR/prepare/"$SQUASHFS"; then
+			echo "$0": Expect $WORKDIR/prepare/"$SQUASHFS" to be file >&2
+			exit 1
+		fi
+		# Force it since the directory
+		# should exist.
+		exec unsquashfs -f -d "$DIR" $WORKDIR/prepare/"$SQUASHFS"
+		;;
+
+	################################################# ISO-squashfs Install support
 
 	################################################# Grub cmdline Linux Default
 
