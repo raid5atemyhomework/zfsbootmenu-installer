@@ -361,8 +361,8 @@ be included:
 
 Note however that the repos appear to have two sets of keys:
 `pop-keyring-2017-archive` (for proprietary and release) and
-`pop-keyring-2018-archive` (for ubuntu).
-Both files are in the package `pop-keyring`.
+`ubuntu-keyring-2018-archive` (for ubuntu).
+`pop-keyring` contains the first, `ubuntu-keyring` the second.
 
 The Pop!_OS system seems to have dived directly into the modern `.sources`
 format rather than `sources.list`.
