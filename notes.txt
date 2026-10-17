@@ -409,6 +409,9 @@ It requires an additional section for autologin.
     command = "cosmic-session"
     user = "$USERNAME"
 
+NVIDIA drivers are available as `system76-driver-nvidia`, they
+seem to be part of default install as of 24.04
+
 ----------------
 
 Tuxedo OS
