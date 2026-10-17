@@ -406,7 +406,7 @@ containing two files: `config.toml` and `cosmic-greeter.toml`.
 It requires an additional section for autologin.
 
     [initial_session]
-    command = "cosmic-session"
+    command = "start-cosmic"
     user = "$USERNAME"
 
 NVIDIA drivers are available as `system76-driver-nvidia`, they
