@@ -875,15 +875,25 @@ DISTROS
 			# check: Just check that the distro name is
 			# valid
 			# preview: output a description of the distro.
+			# pre-install: Prepare to download any
+			# necessary files, saving them in
+			# $WORKDIR/prepare/
 			# install-outside: Initialize the distro's
 			# root files into the specified directory $4,
 			# while still in the hosting OS env.
 			# At minimum this should include /bin/sh.
 			# install-chroot: Continue initializing the
 			# distro, but now chrooted inside the BE.
-			check|preview|install-chroot)
+			check|preview|pre-install|install-chroot)
 				:
 				;;
+
+			# For pre-install, distros that don't
+			# use the newfangled ISO-squashfs
+			# extraction route will not need to
+			# use it.
+			# ISO-squashfs can extract squashfs(es)
+			# in $WORKDIR/prepare
 
 			# For install-chroot, the outer driver has
 			# created the files:
@@ -897,6 +907,7 @@ DISTROS
 			#     /etc/hostname <- hostname
 			#     /etc/hosts <- modified to append the hostname and map it to 127.0.0.1
 			#     /etc/hostid <- random hostid for this machine
+			#     /etc/resolv.conf <- use the host's resolver
 			#
 			# The above files are created after install-outside
 			# has been run.
@@ -2100,7 +2111,14 @@ SCRIPT
 			exit 1
 		fi
 		"$0" check-distro-not-installed "$DISTRO" || exit 1
-		echo "---- zfsbootmenu-installer: Install '$DISTRO'."
+		echo "---- zfsbootmenu-installer: Preparing to install '$DISTRO'."
+		"$0" mkdir-p $WORKDIR/prepare && \
+		"$0" distro pre-install "$DISTRO"
+		EXIT_CODE=$?
+		if test $EXIT_CODE '!=' 0; then
+			echo "$0": Installation preparation failed. >&2
+			exit $EXIT_CODE
+		fi
 		echo "---- zfsbootmenu-installer: Initial install."
 		"$0" mkdir-p $WORKDIR/mnt || exit 1
 		zfs create -o mountpoint=$WORKDIR/mnt -o canmount=noauto \
