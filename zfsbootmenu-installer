@@ -3076,7 +3076,7 @@ Installation will continue successfully regardless.
 				-O keyformat=passphrase \
 				-O org.zfsbootmenu:commandline='quiet splash' \
 				-o autotrim=on \
-				-o compatibility=openzfs-2.2 \
+				-o compatibility=openzfs-2.3 \
 				-m none $TANK_NAME \
 				`cat $WORKDIR/config/parts`
 			EXIT_CODE=$?
@@ -3092,7 +3092,7 @@ Installation will continue successfully regardless.
 				-O keyformat=passphrase \
 				-O org.zfsbootmenu:commandline='quiet splash' \
 				-o autotrim=on \
-				-o compatibility=openzfs-2.2 \
+				-o compatibility=openzfs-2.3 \
 				-m none $TANK_NAME \
 				`cat $WORKDIR/config/vdev` \
 				`cat $WORKDIR/config/parts`
