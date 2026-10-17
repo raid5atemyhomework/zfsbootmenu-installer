@@ -636,3 +636,153 @@ Import armored ASCII to empty keyring:
 
     gpg --keyring ./empty.gpg --no-default-keyring --import ./foo.asc
 
+--------------------------------------------------------
+
+ISO-squashfs Install Path
+
+It turns out we can get many distro's Live CD .iso
+file and use it to install into the ZFS Pool directly.
+We do this by simply extracting the initial-install
+files from the Live CD and putting them into the
+ZFS Pool.
+
+Note that for the most part, once it's on a Unix-enough
+filesystem (like ZFS) it doesn't actually matter too
+much HOW the files in the system got there.
+In fact, that's what most installers are, they have one
+or a few .squashfs files in the .iso.
+Usually it's just `filesystem.squashfs`, in a directory
+called `casper` (Casper being a system that creates a
+Linux filesystem in memory to serve as the root filesystem
+for the Live CD).
+
+On installing, the Live CD installer will format and
+partition the machine-installed storage, mount a root
+filesystem, then expand the .squashfs file into it.
+Then they might do some additional things --- the
+equivalent of
+`dpkg-reconfigure locales keyboard-configuration tzdata`
+et al --- flash the ESP, and call it a day.
+
+For Slimbook OS, there are three .squashfs:
+`filesystem.squashfs`, `filesystem.plasma.squashfs`, and
+`filesystem.gnome.squashfs`.
+It seems likely they use just `filesystem.squashfs` and
+`filesystem.gnome.squashfs`.
+
+Most OSs will use `filesystem.squashfs`.
+
+This is a major unlock, because it greatly reduces the
+pain of having to support new distros, and especially
+new releases of the same distro.
+Often there will be a change in the list of packages
+that are installed between releases.
+
+With the ISO-squashfs path, updating to new release
+versions is much easier: we don't need to track the
+list of packages to be installed to make the distro
+"complete".
+All we need is to just add the packages needed to
+get the ZFS module.
+
+There are some complications, of course, because
+nothing is ever easy.
+
+* We need to hardcode the ISO-signing key for each
+  supported distro and validate the ISO we download
+  has been signed with the key.
+* DKMS!
+  - If the Live CD .squashfs already contains DKMS
+    modules, those will be in binary form and
+    *unsigned*.
+  - We need to force recompiling the DKMS modules
+    after we have set DKMS to sign with our MOK,
+    possibly by iterating over all DKMS modules
+    and kernels (`dkms status` output, basically).
+    - Actually we *don't* need the recompile part,
+      we "just" need the modules signed.
+      But that will make the DKMSS status dirty
+      as it will say there is a difference between
+      built and installed version.
+    - Looking at DKMS source code, it signs at
+      the end of building, so we need to force
+      building AND installing.
+      Building takes a long time, but that's
+      much safer than poking into DKMS's build
+      directory and the kernel's module directory.
+      - Complications abound here: if it's xz
+        format we must explicitly use crc32,
+        we need to extract the hash function from
+        the kernel config, we need to know the
+        structure of the build dir, sigh...
+        Yeah these days kmodsign exists but
+        the rest of DKMS is still a mess.
+
+But in any case, our process becomes:
+
+* We need a new pre-install subcommand for distro
+  (noop on existing supported distros).
+  - pre-install: download ISO file, extact squashfs.
+    (we need to mount the ISO file to extract
+    files inside it and we want to simplify things
+    for users who abort zfsbootmenu-installer by
+    just having $WORKDIR/mnt as the only point to
+    umount -qnR)
+* install-outside: expand squashfs into the target
+  dir.
+* install-chroot:
+  - Setup DKMS and kernel signing.
+    - debian-derivative-prepare
+  - Rebuild any existing DKMS modules.
+    - Iterate over `dkms status` output which
+      outputs one line for every
+      module/version, kerversion pair.
+      Maybe be careful about ", added" lines
+      which do not have kerversion.
+  - Set up keyboard-configuration, locale, timezone.
+    - `dpkg-reconfigure keyboard-configurtion locales tzdata`
+  - Install ZFS kernel module.
+    - The most likely to work across all distros
+      and across distro releases is just to
+      download ZFS from source and build, but
+      that's longer than using `zfs-dkms` if
+      available.
+  - Enable ZFS support.
+    - debian-derivative-install-chroot-zfs-support
+    - Includes zfs-auto-snapshot, which we
+      have to download ourselves if not available.
+  - Enable ZFS services and rebuild initramfs.
+    - debian-derivative-install-chroot-zfs-config
+  - Make the user
+    - debian-derivative-install-chroot-make-user
+  - Enable auto-login
+    - typical-enable-auto-login
+  - Do distro-specific final stuff, like
+    Slimbook OS needing to install device-specific
+    meta packages.
+
+We don't even need to sign kernels since the outside
+install-distro-core does that.
+
+Note that the distro-specific stuff here is much
+smaller:
+
+- Distro dev keys (likely valid across releases)
+- ISO and its validation (likely similar across
+  releases)
+- how to install ZFS (likely the same across
+  releases)
+- Distro-specific final stuff (likely the same
+  across releases)
+
+-----------------------
+
+DKMS status and rebuilding modules
+
+Status output line looks like this:
+
+    virtualbox/7.2.6, 7.0.0-38-generic, x86_64: installed
+
+If the module cannot be built, it's:
+
+    broken/7.2.6, added
