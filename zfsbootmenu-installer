@@ -1313,6 +1313,30 @@ SCRIPT
 
 	# Typical GNU/Linux systems
 
+	typical-no-compress-logs)
+		for DIR in /etc/logrotate.d; do
+			if test -d "$DIR"; then
+				cd "$DIR"
+				for FILE in *; do
+					if test -f "$FILE"; then
+						"$0" typical-no-compress-logs-logrotate-one "$DIR"/"$FILE" || exit 1
+					fi
+				done
+			fi
+		done
+		;;
+
+	typical-no-compress-logs-logrotate-one)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": requires FILE argument >&2
+			exit 1
+		fi
+		FILE="$2"
+		cat "$FILE" | sed -e 's@^[ 	]*compress[ 	]*$@# compress@' > ./.compress-log-tmp
+		mv ./.compress-log-tmp "$FILE"
+		exit 0
+		;;
+
 	typical-enable-auto-login)
 		USERNAME="`cat /usr/local/username`"
 		for GDM_DIR in /etc/gdm3 /etc/gdm; do
@@ -1967,6 +1991,12 @@ SCRIPT
 			echo "$0": Final kernel signing failed. >&2
 			exit $EXIT_CODE
 		fi
+		# Disable log compression: ZFS already
+		# compresses them.
+		echo "---- zfsbootmenu-installer: Disable log compression if possible (best effort)"
+		chroot $WORKDIR/mnt \
+			/usr/local/bin/zfsbootmenu-installer typical-no-compress-logs || exit 1
+
 		exit 0
 		;;
 
