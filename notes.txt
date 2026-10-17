@@ -520,6 +520,66 @@ Trisquel 12 is `ecne`, and the repositories are:
 Like PureOS it has no ZFS support at all; likely the
 compile-OpenZFS-yourself path is the only viable one.
 
+----------------------------------------
+
+Fedora
+
+We need to have some way to create a chroot jail.
+
+* https://www.simplified.guide/redhat-centos-fedora/build-chroot-environment
+* https://unix.stackexchange.com/questions/267155/how-do-you-build-chroot-jails-with-dnf
+* https://gist.github.com/gotha/5af164ac790bf5e42af5edd45f7b04b3
+
+GPG keys are in the `fedora-gpg-keys` package of fedora.
+
+The guide in OpenZFS suggests starting with an "OCI":
+
+* https://openzfs.github.io/openzfs-docs/Getting%20Started/Fedora/Root%20on%20ZFS.html
+
+By the way, the guide's validation is incomplete.
+Either you hardcode the sha256 (otherwise you can still
+be MITMed on *both* the checksum and oci downloads), or
+you hardcode some public key, and validate a signature
+of the checksum.
+
+For kernel module signing, we need to wrangle with
+`akmods`.
+It seems to expect signing keys here:
+
+    /etc/pki/akmods/certs/public_key.der
+    /etc/pki/akmods/private/private_key.priv
+
+It expects those to be owned by `root`, but with `akmods` group.
+The permission requires `private_key.priv` to be readable by
+`akmods` group.
+So:
+
+    # pubkey is public
+    chown root:akmods /etc/pki/akmods/certs/public_key.der
+    chmod 644 /etc/pki/akmods/certs/public_key.der
+    # privkey is private
+    chown root:akmods /etc/pki/akmods/private/private_key.priv
+    chmod 640 /etc/pki/akmods/private/private_key.priv
+
+I can't determine for certain if `akmods` will automatically
+sign installed kmods with these files, though the fact that
+the private key has group `akmods` and is group-readable
+certainly strongly implies that.
+
+On the other hand, `akmods` seems to be responsible for
+*all* kernel modules, including those that are downloaded
+as binary.
+
+Anyway obviously the plan is to copy `/usr/local/mok/`
+files into the above.
+
+It also looks like Fedora also uses DKMS; it's certainly
+used for ZFS there.
+
+For kernel signing, it seems likely that we can use the
+same `/etc/kernel/postinst.d` hook.
+`sbsign` seems to also exist in Fedora.
+
 ---------------------------
 
 GPT GUIDs
