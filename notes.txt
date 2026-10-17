@@ -355,9 +355,14 @@ The Pop!_OS key can be gotten by:
 Looking at my old Pop!_OS system, it looks like the following repos should
 be included:
 
-    http://apt.pop-os.org/proprietary noble
-    http://apt.pop-os.org/release noble
-    http://apt.pop-os.org/ubuntu noble noble-security noble-updates noble-backports
+    http://apt.pop-os.org/proprietary noble main
+    http://apt.pop-os.org/release noble main
+    http://apt.pop-os.org/ubuntu noble noble-security noble-updates noble-backports   main universe multiverse restricted
+
+Note however that the repos appear to have two sets of keys:
+`pop-keyring-2017-archive` (for proprietary and release) and
+`pop-keyring-2018-archive` (for ubuntu).
+Both files are in the package `pop-keyring`.
 
 The Pop!_OS system seems to have dived directly into the modern `.sources`
 format rather than `sources.list`.
@@ -373,10 +378,36 @@ Thus, it does still need `zfs-dkms`.
 The issue is that `zfs-initramfs` does not depend on `zfs-dkms`
 on Ubuntu, as Ubuntu assumes all kernels already have ZFS.
 I believe the correct solution is to always add `zfs-dkms` *and*
-`zfs-initramfs` for Pop!_OS (whereas Debian does not need
-`zfs-dkms` as `zfs-initramfs` will pull it in).
+`zfs-initramfs` for Pop!_OS (whereas Debian does not need an
+explicit `zfs-dkms` as `zfs-initramfs` will pull it in).
 And `zfs-dkms` will only really work if we have `linux-headers-*`
 (it otherwise does ZILCH).
+
+The linux is `linux-system76`.
+
+Pop!_OS Cosmic Desktop setup is very very different from the
+usual.
+In particular, it uses an unusual DM, `greetd`.
+In 24.04 in particular, there is `/etc/greetd/` directory
+containing two files: `config.toml` and `cosmic-greeter.toml`.
+`config.toml` is unused.
+`cosmic-greeter.toml` has a `[default_session]` entry:
+
+    [terminal]
+    vt = "1"
+
+    [general]
+    service = "cosmic-greeter"
+
+    [default_session]
+    command = "cosmic-greeter-start"
+    user = "cosmic-greeter"
+
+It requires an additional section for autologin.
+
+    [initial_session]
+    command = "cosmic-session"
+    user = "$USERNAME"
 
 ----------------
 
