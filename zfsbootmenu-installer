@@ -2420,10 +2420,8 @@ Please try again.' 0 0
 
 	initialize-processing)
 		echo "---- zfsbootmenu-installer: Initialize: Begin."
-		if test '!' -f /etc/hostid; then
-			# See: https://github.com/zbm-dev/zfsbootmenu/discussions/465
-			zgenhostid 0x00bab10c
-		fi
+		# See: https://github.com/zbm-dev/zfsbootmenu/discussions/465
+		zgenhostid -f 0x00bab10c
 		cp /etc/hostid $WORKDIR/config/hostid
 		"$0" create-mok-inner "`cat $WORKDIR/config/hostname`" $WORKDIR/config/mok && \
 		"$0" initialize-submit-mok && \
