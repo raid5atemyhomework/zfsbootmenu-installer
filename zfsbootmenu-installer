@@ -1901,8 +1901,9 @@ SCRIPT
 		cp $WORKDIR/config/mok/MOK.priv $WORKDIR/mnt/usr/local/mok/MOK.priv && \
 		cp $WORKDIR/config/mok/MOK.der $WORKDIR/mnt/usr/local/mok/MOK.der && \
 		cp $WORKDIR/config/mok/MOK.pem $WORKDIR/mnt/usr/local/mok/MOK.pem && \
-		cp $WORKDIR/config/username $WORKDIR/mnt/usr/local/username &&
-		cp "$0" $WORKDIR/mnt/usr/local/bin/zfsbootmenu-installer
+		cp $WORKDIR/config/username $WORKDIR/mnt/usr/local/username && \
+		cp "$0" $WORKDIR/mnt/usr/local/bin/zfsbootmenu-installer && \
+		cp /etc/resolv.conf $WORKDIR/mnt/etc/resolv.conf
 		EXIT_CODE=$?
 		if test $EXIT_CODE '!=' 0; then
 			echo "$0": Failed to copy into new distro >&2
@@ -1918,7 +1919,8 @@ SCRIPT
 			$WORKDIR/mnt/usr/local/username && \
 		chmod 000 $WORKDIR/mnt/etc/zfs/zroot.key && \
 		chmod 600 $WORKDIR/mnt/usr/local/mok/MOK.priv && \
-		chmod 755 $WORKDIR/mnt/usr/local/bin/zfsbootmenu-installer
+		chmod 755 $WORKDIR/mnt/usr/local/bin/zfsbootmenu-installer && \
+		chmod 777 $WORKDIR/mnt/etc/resolv.conf
 		EXIT_CODE=$?
 		if test $EXIT_CODE '!=' 0; then
 			echo "$0": Failed to chmod files in new distro >&2
