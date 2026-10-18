@@ -2208,6 +2208,14 @@ TOML
 			zfs-initramfs zfsutils-linux zfs-auto-snapshot || exit 1
 		"$0" iso-debian-derivative-install-chroot-post-zfs-dkms || exit 1
 
+		# kernelstub is prone to saying something like
+		# "you are in a live environment, run `sudo kernelstub`
+		# or your computer will self-destruct".
+		# Unfortunately kernelstub is a dinky little
+		# non-ZFS-capable bootloader, so make kernelstub
+		# self-destruct instead.
+		apt-mark auto kernelstub
+
 		"$0" iso-debian-derivative-install-chroot-final-cleanup
 		exec "$0" pop-cosmic-enable-auto-login
 		;;
