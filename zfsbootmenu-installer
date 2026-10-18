@@ -517,6 +517,26 @@ yIq0i0u4AwGJI0iKnF5FuVz2IdvkTpva7mDWgW0pWNu38VvM5J5e6JPi1R/t
 KEYRING
 		;;
 
+		tuxedo-iso-signing-key)
+			cat > $ASC <<KEYRING
+-----BEGIN PGP PUBLIC KEY BLOCK-----
+
+mDMEajEkcxYJKwYBBAHaRw8BAQdApY3uarShRh6RmGsTsNVP5Bv1DVpgLrF8ZfTz
+5DWgvbC0d1RVWEVETyBDb21wdXRlcnMgR21iSCAoS2V5IHRvIGJlIHVzZWQgc2ln
+bmluZyBvZmZpY2lhbCBJU09zIGJ5IFRVWEVETyBDb21wdXRlcnMgR21iSCkgPGlz
+by1zaWduaW5nQHR1eGVkb2NvbXB1dGVycy5jb20+iJkEExYKAEEWIQSTgIF3PD8n
+88HmvcxObJ9RAmhETAUCajEkcwIbAwUJAeEzgAULCQgHAgIiAgYVCgkICwIEFgID
+AQIeBwIXgAAKCRBObJ9RAmhETLkHAP0a73s/UsbXmx/j9hMcrickVV39l3HWLoVW
+Opv9ZOgS3AEAtjRSwrNyCITMW09svyXpt/ted7+9uiJRdNalyRRqhg64OARqMSRz
+EgorBgEEAZdVAQUBAQdAHvZWJhHTy2bYMUaBzIUTEukbrxduE1h+H75Xp0MOoBUD
+AQgHiH4EGBYKACYWIQSTgIF3PD8n88HmvcxObJ9RAmhETAUCajEkcwIbDAUJAeEz
+gAAKCRBObJ9RAmhETKy+AQDN/Z503djHLpuHt4aamS4/pVr304i1B/3dc2ZALWk2
+YAD+J9nsV4+ybGwPZ3J18RIvuJKzZ+UKyen6ePvlAVYjrwY=
+=DSTQ
+-----END PGP PUBLIC KEY BLOCK-----
+KEYRING
+			;;
+
 		ubuntu-archive-keyring)
 			cat > $ASC <<KEYRING
 -----BEGIN PGP PUBLIC KEY BLOCK-----
@@ -926,6 +946,7 @@ KUbuntu26.04
 Debian13
 SlimbookOS26
 Pop_OS24.04
+TUXEDO-OS_202609
 DISTROS
 			exit 0
 		fi
@@ -1171,6 +1192,42 @@ DESC
 						exec "$0" pop-install-chroot "24"
 						;;
 
+				esac
+				;;
+
+			TUXEDO-OS_202609)
+				case $SUBCOMMAND in
+					preview)
+						cat <<DESC
+TUXEDO OS 202609161651
+
+TUXEDO OS 202609 is a KUbuntu 24.04 (Noble Numbat)
+derivative created by Tuxedo Computers.
+
+It has a kernel that includes fixes and
+optimizations for Tuxedo machines and similar
+hardware, as well as Tuxedo Tomte, a tool to
+automatically check your hardware and get
+TUXEDO OS packages needed for it.
+
+Installed with KDE Plasma.
+DESC
+						;;
+
+					pre-install)
+						echo "---- zfsbootmenu-installer: Install TUXEDO-OS_202609 (prepare)"
+						exec "$0" tuxedo-download 202609161651
+						;;
+
+					install-outside)
+						echo "---- zfsbootmenu-installer: Install TUXEDO-OS_202609 (prepare)"
+						exec "$0" iso-unsquash tuxedo.amd64 "$DIR"
+						;;
+
+					install-chroot)
+						echo "---- zfsbootmenu-installer: Install TUXEDO-OS_202609 (in chroot)"
+						exec "$0" tuxedo-install-chroot ubuntu
+						;;
 				esac
 				;;
 
@@ -2051,6 +2108,12 @@ SOURCES
 		exec dpkg-reconfigure keyboard-configuration locales tzdata
 		;;
 
+	# In between these two functions, install
+	# ZFS:
+	# - kernel module
+	# - zpool, zfs, and other bins
+	# - zfs-auto-snapshot
+
 	# Install via the ISO-squashfs path,
 	# for Debian-derivative distros.
 	# This finishes up the installation,
@@ -2059,7 +2122,6 @@ SOURCES
 	# ZFS module.
 	iso-debian-derivative-install-chroot-post-zfs-dkms)
 		"$0" debian-derivative-install-chroot-more || exit 1
-		"$0" debian-derivative-install-chroot-zfs-support || exit 1
 		"$0" debian-derivative-install-chroot-zfs-config || exit 1
 		"$0" debian-derivative-install-chroot-make-user || exit 1
 		exit 0
@@ -2081,7 +2143,7 @@ SOURCES
 			"pop-os_${YEAR}.${MONTH}_amd64_nvidia_${REV}.iso" \
 			"https://iso.pop-os.org/${YEAR}.${MONTH}/amd64/nvidia/${REV}/SHA256SUMS" \
 			"https://iso.pop-os.org/${YEAR}.${MONTH}/amd64/nvidia/${REV}/SHA256SUMS.gpg" || exit 1
-		"$0" iso-extract-from-installer \
+		exec "$0" iso-extract-from-installer \
 			casper \
 			filesystem.squashfs
 		;;
@@ -2104,9 +2166,186 @@ TOML
 
 	pop-install-chroot)
 		"$0" iso-debian-derivative-install-chroot-pre-zfs-dkms || exit 1
-		apt install -y zfs-dkms zfs-initramfs || exit 1
+		apt install -y zfs-dkms \
+			zfs-initramfs zfsutils-linux zfs-auto-snapshot || exit 1
 		"$0" iso-debian-derivative-install-chroot-post-zfs-dkms || exit 1
 		exec "$0" pop-cosmic-enable-auto-login
+		;;
+
+	# TUXEDO OS
+
+	tuxedo-download)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": Need DATE argument >&2
+			exit 1
+		fi
+		DATE="$2"
+		"$0" iso-download-validate \
+			tuxedo-iso-signing-key \
+			"https://os.tuxedocomputers.com/TUXEDO-OS-$DATE.iso" \
+			"TUXEDO-OS-$DATE.iso" 	\
+			"https://os.tuxedocomputers.com/checksums/TUXEDO-OS-$DATE.iso.sha256" \
+			"https://os.tuxedocomputers.com/checksums/TUXEDO-OS-$DATE.iso.sha256.asc"
+		exec "$0" iso-extract-from-installer \
+			tuxedo \
+			tuxedo.amd64
+		;;
+
+	tuxedo-install-chroot-clean-live)
+		# Clean up the dirt in the Live
+		echo "---- zfsbootmenu-installer: TUXEDO-OS: Remove FLL (Live environment) and Installer"
+		for FLL_SERVICE in \
+				fll-adduser fll-cmdline fll-live \
+				fll-locales fll-snakeoil-cert \
+				fll-xdm \
+				tuxedo-common-livesettings \
+				tuxedo-kde-livesettings \
+				; do
+			yes | \
+			systemctl disable $FLL_SERVICE > /dev/null 2>&1
+		done
+		# Do this one at a time in case package
+		# names for one of them changes, we still
+		# want to remove as much as possible.
+		for FLL_PKG in \
+				fll-live-initramfs fll-live-initscripts \
+				fll-live-utils \
+				tuxedo-common-livesettings \
+				tuxedo-kde-livesettings \
+				tuxedo-sddm-livesettings \
+				os-prober \
+				calamares \
+				calamares-branding-tuxedo \
+				; do
+			echo "---- zfsbootmenu-installer: TUXEDO-OS: Try remove $FLL_PKG"
+			# Say yes to anything they want to
+			# ask, just get it out.
+			yes | apt remove --purge "$FLL_PKG"
+		done
+
+		# Remove existing 'tux' user and
+		# make sure /home is empty
+		echo "---- zfsbootmenu-installer: TUXEDO-OS: Remove 'tux' user"
+		# deluser might scan /proc, which is
+		# the current user's environment in
+		# whatever Boot Environment or Live
+		# the user is doing, and prevent
+		# removal if the user has running
+		# processes.
+		# The current user is likely UID=1000,
+		# which is also the UID of tux in
+		# the TUXEDO-OS ISO image.
+		# userdel is a low-level tool that
+		# just removes the user entry.
+		userdel tux > /dev/null 2>&1
+		rm -rf /home > /dev/null 2>&1
+		mkdir /home > /dev/null 2>&1
+
+		exit 0
+		;;
+
+	tuxedo-enable-auto-login)
+		# The installed /etc/sddm.conf.d/kde_settings.conf
+		# here already has an [Autologin] section on
+		# TUXEDO OS 202609161651.
+		# The section has an empty User=, which makes sddm
+		# log into the [Last] User= in the file
+		# /var/lib/sddm/state.conf
+		# It also defaults Session=plasmax11, but the
+		# installer modifies it to plasma if it detects
+		# Wayland-compatible (which should be ~everyone)
+		#
+		# Now the problem is, on first installing,
+		# [Last] User= is not populated yet, so we just
+		# put an explicit [Autologin] User=username in
+		# /etc/sddm.conf.d/kde_settings.conf
+		#
+		# This part is where we probe for it.
+		#
+		# If we fail to probe for the expected
+		# kde_settings.conf, we just delete
+		# kde_settings.conf (if it exists) and fall back
+		# to typical.
+
+		GOT_EXPECTED=no
+
+		SETTINGS=/etc/sddm.conf.d/kde_settings.conf
+		echo "---- zfsbootmenu-installer: TUXEDO-OS: Enable auto login"
+
+		if test -f $SETTINGS; then
+			if grep '^[ 	]*\[Autologin\][ 	]*$' $SETTINGS > /dev/null 2>&1; then
+				if grep '^[ 	]*User[ 	]*=[ 	]*$' $SETTINGS > /dev/null 2>&1; then
+					GOT_EXPECTED=yes
+				fi
+			fi
+		fi
+
+		if test $GOT_EXPECTED '=' yes; then
+			echo "---- zfsbootmenu-installer: TUXEDO-OS: Filling in User= setting in $SETTINGS"
+			USERNAME="`cat /usr/local/username`"
+			mv $SETTINGS $SETTINGS.bak || exit 1
+			cat $SETTINGS.bak \
+			| sed -e 's@^[	 ]*User[	 ]*=[	 ]*$@User='"$USERNAME"'@' \
+			| sed -e 's@^[	 ]*Session[	 ]*=[	 ]*plasmax11[	 ]*$@Session=plasma@' \
+				> $SETTINGS
+			if test '!' -f $SETTINGS; then
+				echo "$0": Failed to change kde_settings.conf >&2
+				mv $SETTINGS.bak $SETTINGS
+				exit 0
+			fi
+		else
+			echo "---- zfsbootmenu-installer: TUXEDO-OS: Unexpected $SETTINGS, falling back to typical...."
+			# Fallback. Move the current settings
+			# if any.
+			mv $SETTINGS $SETTINGS.bak > /dev/null 2>&1
+			exec "$0" typical-enable-auto-login
+		fi
+
+		exit 0
+		;;
+
+	tuxedo-install-chroot)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": requires BASE argument >&2
+			exit 1
+		fi
+		BASE=$2
+
+		"$0" tuxedo-install-chroot-clean-live || exit 1
+
+		"$0" iso-debian-derivative-install-chroot-pre-zfs-dkms || exit 1
+
+		echo "---- zfsbootmenu-installer: TUXEDO-OS: Install ZFS packages."
+		# If it is based on ubuntu, we don't
+		# need zfs-dkms or zfs-initramfs.
+		# The Ubuntu-based kernel (modified
+		# by TUXEDO) has a ZFS module that is
+		# signed by the kernel's own building
+		# key, which it always accepts, so
+		# doesn't need MOK signing.
+		# Otherwise, assume it's Debian-based
+		# and use zfs-dkms.
+		case $BASE in
+		ubuntu)
+			apt install -y zfsutils-linux zfs-auto-snapshot \
+				zfs-initramfs || exit 1
+			;;
+
+		*)
+			apt install -y zfsutils-linux zfs-auto-snapshot \
+				zfs-initramfs zfs-dkms || exit 1
+			;;
+
+		esac
+
+		"$0" iso-debian-derivative-install-chroot-post-zfs-dkms || exit 1
+
+		# We removed FLL packages,
+		# let's clean up.
+		yes | apt autoremove --purge
+		yes | apt autoclean
+
+		exec "$0" tuxedo-enable-auto-login
 		;;
 
 	# zfsbootmenu-installer hooks
