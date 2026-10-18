@@ -140,6 +140,23 @@ Think of ECC RAM as simply closing the last loophole for
 data loss; ZFS closes all the others that lesser filesystems
 won't.
 
+You *must* still use ZFS even if it's a single device.
+Remember, whole-device failure is the biggest enemy but it's
+not the ***only*** enemy.
+Random bitflips can happen, and you need a full integrity
+system to validate your precious data on that one disk you
+have, and ZFS gets that for you.
+And snapshots, come on!
+Hacking your OS to add drivers to support that expensive
+hardware?
+Yes, that's totally safe and not going to risk making your
+system unbootable, but in the off chance it actually does,
+you can roll back to an older snapshot.
+Sure, TEMU ZFS I mean BTRFS has integrity and snapshots
+too, but it also has the literally killer feature of
+suddenly collapsing if you make a mistake, just use ZFS
+already.
+
 `zfsbootmenu-installer` does not set up a swap partition.
 Ideally, the swap partition would be its own `zvol` on the
 same ZFS Pool you are using.
