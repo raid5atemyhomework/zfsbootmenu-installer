@@ -922,7 +922,7 @@ README
 		else
 			comment=
 		fi
-		"$0" distro list | fzf --layout=reverse-list --no-sort --no-input --border --border-label='Select Distro'"$comment" --preview="$0"' distro preview {}'
+		"$0" distro list | fzf --layout=reverse-list --no-sort --border --border-label='Select Distro'"$comment" --preview="$0"' distro preview {}'
 		exit 0
 		;;
 
@@ -3036,7 +3036,7 @@ SCRIPT
 		;;
 
 	select-vdev)
-		printf 'single\nmirror\nraidz1\nraidz2\nraidz3\n' | fzf --layout=reverse-list --no-sort --no-input --border --border-label='Select ZFS Pool Type' --preview="$0"' preview-vdev {}'
+		printf 'single\nmirror\nraidz1\nraidz2\nraidz3\n' | fzf --layout=reverse-list --no-sort --border --border-label='Select ZFS Pool Type' --preview="$0"' preview-vdev {}'
 		exit 0
 		;;
 
@@ -3096,7 +3096,7 @@ DESC
 		fi
 		REASON="$2"
 		DANGER="$3"
-		"$0" lsdisk |  fzf --layout=reverse-list --no-input --border --multi --border-label='Select disks '"$REASON" --preview="$0"' preview-disk {} '"$DANGER"
+		"$0" lsdisk |  fzf --layout=reverse-list --border --multi --border-label='Select disks '"$REASON" --preview="$0"' preview-disk {} '"$DANGER"
 		exit 0
 		;;
 
@@ -3585,7 +3585,7 @@ Installation will continue successfully regardless.
 			echo "$0": need to-confirm file in wokrdir >&2
 			exit 1
 		fi
-		SEL=`printf 'No\nYes\n' | fzf --layout=reverse-list --no-sort --no-input --border --border-label='ARE YOU SURE?' --preview="$0"' preview-confirm'`
+		SEL=`printf 'No\nYes\n' | fzf --layout=reverse-list --no-sort --border --border-label='ARE YOU SURE?' --preview="$0"' preview-confirm'`
 		rm $WORKDIR/to-confirm > /dev/null 2>&1
 		if test X"$SEL" '=' XYes; then
 			exit 0
@@ -3640,7 +3640,7 @@ Installation will continue successfully regardless.
 		;;
 
 	select-disk-reflash-esp)
-		"$0" lsdisk-with-esp | fzf --layout=reverse-list --no-input --border --border-label='Select disk to Reflash ESP' --preview="$0"' preview-disk {} no'
+		"$0" lsdisk-with-esp | fzf --layout=reverse-list --border --border-label='Select disk to Reflash ESP' --preview="$0"' preview-disk {} no'
 		exit 0
 		;;
 
@@ -3858,7 +3858,7 @@ Installation will continue successfully regardless.
 			exit 1
 		fi
 		REASON=$2
-		"$0" list-boot-environments | fzf --layout=reverse-list --no-sort --no-input --border --border-label='Select Boot Environment '"$REASON" --preview="$0"' preview-boot-environment {}'
+		"$0" list-boot-environments | fzf --layout=reverse-list --no-sort --border --border-label='Select Boot Environment '"$REASON" --preview="$0"' preview-boot-environment {}'
 		exit 0
 		;;
 
@@ -4068,7 +4068,7 @@ export FZF_DEFAULT_OPTS
 export FZF_DEFAULT_OPTS_FILE
 export FZF_API_KEY
 
-SEL=`printf "$MAINMENU" | fzf --layout=reverse-list --no-sort --no-input --border --border-label='zfsbootmenu-installer '"$VERSION"' Main Menu'  --preview="$0"' preview-mainmenu {}'`
+SEL=`printf "$MAINMENU" | fzf --layout=reverse-list --no-sort --border --border-label='zfsbootmenu-installer '"$VERSION"' Main Menu'  --preview="$0"' preview-mainmenu {}'`
 
 case $SEL in
 	Initialize|AddBootEnvironment|ChangeDefaultBoot|ReflashESP|PrepareNewDisk|ChrootIntoBootEnvironment)
