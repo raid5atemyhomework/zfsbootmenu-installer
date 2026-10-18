@@ -2100,6 +2100,14 @@ SOURCES
 		# If these error, it's fine, we ignore it.
 		systemctl disable casper-md5check.service > /dev/null 2>&1
 		systemctl disable casper.service > /dev/null 2>&1
+		# Some LiveCDs might have os-prober so
+		# they can offer to multi-boot.
+		# We expect all our OSs to be in separate
+		# ZFS datasets, and ZFSBootMenu will do
+		# that probing at each boot anyway, so
+		# remove it; os-prober takes a LOOOONG
+		# time on ZFS, too.
+		yes | apt remove --purge os-prober
 
 		"$0" debian-derivative-prepare || exit 1
 		apt install -y --no-install-recommends dkms || exit 1
@@ -2213,7 +2221,6 @@ TOML
 				tuxedo-common-livesettings \
 				tuxedo-kde-livesettings \
 				tuxedo-sddm-livesettings \
-				os-prober \
 				calamares \
 				calamares-branding-tuxedo \
 				; do
