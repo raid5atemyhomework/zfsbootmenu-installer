@@ -775,6 +775,19 @@ smaller:
 - Distro-specific final stuff (likely the same
   across releases)
 
+Some more things:
+
+Most Debian-derivative Live CDs have a
+filesystem.manifest-remove file too, not just the
+filesystem.squashfs.
+It's a simple list of packages.
+However, we shouldn't just `apt remove` them;
+rather, we should `apt-mark auto` them, in case
+we find out we need them for our ZFS stuff.
+We can put this file in the root, then
+`apt-mark` them in -pre-zfs-dkms and add a new
+-final-cleanup that uses `autoremove`
+
 -----------------------
 
 DKMS status and rebuilding modules
