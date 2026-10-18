@@ -2310,6 +2310,7 @@ TOML
 				mv $SETTINGS.bak $SETTINGS
 				exit 0
 			fi
+			chmod 644 $SETTINGS
 		else
 			echo "---- zfsbootmenu-installer: TUXEDO-OS: Unexpected $SETTINGS, falling back to typical...."
 			# Fallback. Move the current settings
@@ -2356,6 +2357,12 @@ TOML
 		esac
 
 		"$0" iso-debian-derivative-install-chroot-post-zfs-dkms || exit 1
+
+		# For some reason, .sources file gets duplicated
+		# with a .list file?
+		if test -e '/etc/apt/sources.list.d/tuxedo-computers.source'; then
+			rm -rf /etc/apt/sources.list.d/tuxedo-computers-*.list > /dev/null 2>&1
+		fi
 
 		# We removed FLL packages,
 		# let's clean up.
