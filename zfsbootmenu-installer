@@ -2857,10 +2857,10 @@ SCRIPT
 
 	# Mount the special devices into new distro.
 	mount-magic-to-new-distro)
-		mount -t proc proc $WORKDIR/mnt/proc && \
-		mount -t sysfs sys $WORKDIR/mnt/sys && \
-		mount -B /dev $WORKDIR/mnt/dev && \
-		mount -t devpts pts $WORKDIR/mnt/dev/pts
+		mount --make-rslave -t proc proc $WORKDIR/mnt/proc && \
+		mount --make-rslave -t sysfs sys $WORKDIR/mnt/sys && \
+		mount --make-rslave -B /dev $WORKDIR/mnt/dev && \
+		mount --make-rslave -t devpts pts $WORKDIR/mnt/dev/pts
 		EXIT_CODE=$?
 		if test $EXIT_CODE '!=' 0; then
 			echo "$0": Failed to mount magic devices in new distro >&2
@@ -3970,6 +3970,14 @@ Installation will continue successfully regardless.
 		mount -t zfs $BE $WORKDIR/mnt
 		if test $? '!=' 0; then
 			echo "$0": Could not mount >&2
+			umount -qnR $WORKDIR/mnt
+			rm -rf $WORKDIR
+			exit 1
+		fi
+
+		"$0" mount-magic-to-new-distro
+		if test $? '!=' 0; then
+			echo "$0": Could not mount magic devices >&2
 			umount -qnR $WORKDIR/mnt
 			rm -rf $WORKDIR
 			exit 1
