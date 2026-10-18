@@ -154,7 +154,8 @@ system unbootable, but in the off chance it actually does,
 you can roll back to an older snapshot.
 Sure, TEMU ZFS I mean BTRFS has integrity and snapshots
 too, but it also has the literally killer feature of
-suddenly collapsing if you make a mistake, just use ZFS
+suddenly collapsing if you make a mistake (I put my `/home`
+partition into a BTRFS `raid5`.  Once.), just use ZFS
 already.
 
 `zfsbootmenu-installer` does not set up a swap partition.
