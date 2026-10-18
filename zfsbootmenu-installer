@@ -2800,6 +2800,27 @@ SCRIPT
 		"$0" mkdir-p $WORKDIR/mnt/etc/zfs || exit 1
 		"$0" mkdir-p $WORKDIR/mnt/usr/local/bin || exit 1
 		"$0" mkdir-p $WORKDIR/mnt/usr/local/mok || exit 1
+
+		# Juggle files that might already exist in the
+		# mounted dir.
+		# We need to do this because some ISO-squashfs
+		# LiveCDs that we use might include these as
+		# symlinks to absolute paths.
+		# Because the symlinks are absolute paths, they
+		# will not exist on the hosting system, and they
+		# will be broken symlinks, which will cause
+		# cp to balk at overwriting them.
+		rm -rf $WORKDIR/mnt/etc/hostid > /dev/null 2>&1
+		rm -rf $WORKDIR/mnt/etc/hostname > /dev/null 2>&1
+		rm -rf $WORKDIR/mnt/etc/zfs/zroot.key > /dev/null 2>&1
+		# Move this out of the way at this point; we will
+		# restore it later.
+		# mv works on broken symlinks.
+		mv $WORKDIR/mnt/etc/resolv.conf $WORKDIR/mnt/etc/resolv.conf.bak > /dev/null 2>&1
+
+		# Proper OSs would not put anything in /usr/local
+		# so no need to juggle files there.
+
 		cp $WORKDIR/config/hostid $WORKDIR/mnt/etc/hostid && \
 		cp $WORKDIR/config/hostname $WORKDIR/mnt/etc/hostname && \
 		cp $WORKDIR/config/zroot.key $WORKDIR/mnt/etc/zfs/zroot.key && \
@@ -2910,6 +2931,10 @@ SCRIPT
 		echo "---- zfsbootmenu-installer: Disable log compression if possible (best effort)"
 		chroot $WORKDIR/mnt \
 			/usr/local/bin/zfsbootmenu-installer typical-no-compress-logs || exit 1
+
+		# Restore /etc/resolv.conf if there
+		# was a backup.
+		mv $WORKDIR/mnt/etc/resolv.conf.bak $WORKDIR/mnt/etc/resolv.conf > /dev/null 2>&1
 
 		exit 0
 		;;
