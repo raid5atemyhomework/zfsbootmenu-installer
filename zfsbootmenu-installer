@@ -2107,7 +2107,10 @@ SOURCES
 		# that probing at each boot anyway, so
 		# remove it; os-prober takes a LOOOONG
 		# time on ZFS, too.
-		yes | apt remove --purge os-prober
+		yes | apt remove --purge os-prober > /dev/null 2>&1
+		# ~Every LiveCD uses calamares in some
+		# capacity.
+		yes | apt remove --purge calamares > /dev/null 2>&1
 
 		"$0" debian-derivative-prepare || exit 1
 		apt install -y --no-install-recommends dkms || exit 1
