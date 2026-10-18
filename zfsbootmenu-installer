@@ -38,7 +38,7 @@
 
 #
 
-VERSION=1.0.0
+VERSION=1.0.1
 
 # Convenient names.
 # These are NOT intended to be modifiable.
@@ -2176,10 +2176,16 @@ TOML
 		;;
 
 	pop-install-chroot)
+		echo "---- zfsbootmenu-installer: Removing installer packages..."
+		for KILL_PKG in pop-installer pop-installer-casper pop-installer-session; do
+			yes | apt remove --purge $KILL_PKG > /dev/null 2>&1
+		done
 		"$0" iso-debian-derivative-install-chroot-pre-zfs-dkms || exit 1
 		apt install -y zfs-dkms \
 			zfs-initramfs zfsutils-linux zfs-auto-snapshot || exit 1
 		"$0" iso-debian-derivative-install-chroot-post-zfs-dkms || exit 1
+
+		yes | apt autoremove --purge
 		exec "$0" pop-cosmic-enable-auto-login
 		;;
 
