@@ -2210,7 +2210,7 @@ TOML
 
 	tuxedo-install-chroot-clean-live)
 		# Clean up the dirt in the Live
-		echo "---- zfsbootmenu-installer: TUXEDO-OS: Remove FLL (Live environment) and Installer"
+		echo "---- zfsbootmenu-installer: TUXEDO-OS: Remove FLL (Live environment), Installer, and Chroot Helper"
 		for FLL_SERVICE in \
 				fll-adduser fll-cmdline fll-live \
 				fll-locales fll-snakeoil-cert \
@@ -2232,6 +2232,7 @@ TOML
 				tuxedo-sddm-livesettings \
 				calamares \
 				calamares-branding-tuxedo \
+				tuxedo-repair \
 				; do
 			echo "---- zfsbootmenu-installer: TUXEDO-OS: Try remove $FLL_PKG"
 			# Say yes to anything they want to
