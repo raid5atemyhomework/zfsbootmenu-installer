@@ -45,6 +45,7 @@ VERSION=1.0.0
 
 WORKDIR="/zfsbootmenu-installer-work"
 TANK_NAME=zroot
+LOCALSRCDIR="/usr/local/src"
 
 # For best portability, we assume shell functions are not supported.
 # For code organization purposes, the case $1 below is effectively
@@ -2160,6 +2161,176 @@ SCRIPT
 		;;
 
 	################################################# distro
+
+	################################################# OpenZFS Direct Compile
+
+	openzfs-info)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": requires SUBCOMMAND argument >&2
+			exit 1
+		fi
+		SUBCOMMAND="$2"
+		case $SUBCOMMAND in
+		url)
+			echo 'https://github.com/openzfs/zfs/releases/download/zfs-2.3.9/zfs-2.3.9.tar.gz'
+			;;
+
+		basename)
+			echo 'zfs-2.3.9.tar.gz'
+			;;
+
+		dir)
+			echo 'zfs-2.3.9'
+			;;
+
+		hash)
+			echo '26b0c7d433ebc3cbea5289b9d06792d628aff13c2c6e5ce70096db1b026c5699'
+			;;
+
+		*)
+			echo "$0": Unknown subcommand $SUBCOMMAND >&2
+			exit 1
+			;;
+
+		esac
+		exit 0
+		;;
+
+	# Download the tarball into the $DIR,
+	# validate it, and extract it.
+	openzfs-download-validate)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": requires DIR argument >&2
+			exit 1
+		fi
+		DIR="$2"
+		ZFS_URL="`"$0" openzfs-info url`"
+		ZFS_BASENAME="`"$0" openzfs-info basename`"
+		ZFS_DIR="`"$0" openzfs-info dir`"
+		ZFS_SHA256="`"$0" openzfs-info hash`"
+		if test X"$DIR" '=' Xnone; then
+			echo "$ZFS_DIR"
+			exit 0
+		fi
+
+		"$0" ensure gzip || exit 1
+		"$0" ensure tar || exit 1
+		"$0" ensure wget || exit 1
+
+		echo "---- zfsbootmenu-installer: Download and validate $ZFS_DIR"
+
+		cd "$DIR"
+		wget --no-verbose "$ZFS_URL" --output-document=./"$ZFS_BASENAME" > /dev/null
+		echo "$ZFS_SHA256" "$ZFS_BASENAME" | sha256sum -c
+		if test $? '!=' 0; then
+			echo "$0": Failed validation >&2
+			exit 1
+		fi
+		tar xzf "$ZFS_BASENAME"
+		if test '!' -d "$ZFS_DIR"; then
+			echo "$0": Failed to extract archive >&2
+			exit 1
+		fi
+		rm -rf ./"$ZFS_BASENAME" > /dev/null 2>&1
+		exit 0
+		;;
+
+	# Install dependencies needed to compile
+	# OpenZFS
+	openzfs-debian-derivative-install-deps)
+		echo "---- zfsbootmenu-installer: Installing OpenZFS dependencies..."
+		exec \
+		apt install -y\
+			alien autoconf automake build-essential \
+			debhelper-compat dh-dkms dh-python dkms \
+			fakeroot gawk libaio-dev libattr1-dev \
+			libblkid-dev libcurl4-openssl-dev libelf-dev \
+			libffi-dev libpam0g-dev libssl-dev libtirpc-dev \
+			libtool libudev-dev linux-headers-generic \
+			po-debconf python3 python3-all-dev python3-cffi \
+			python3-dev python3-packaging python3-setuptools \
+			python3-sphinx uuid-dev zlib1g-dev
+		;;
+
+	# Compiles ZFS in the ZFS_DIR.
+	# Note that OpenZFS weirdly enough
+	# puts its .deb files one layer out.
+	# Also specify whether you use
+	# initramfs or dracut as the second
+	# argument.
+	openzfs-debian-derivative-compile)
+		if test X${3+set} '!=' Xset; then
+			echo "$0": requires ZFS_DIR INITRD_MAKER argument >&2
+			exit 1
+		fi
+		ZFS_DIR="$2"
+		INITRD_MAKER="$3"
+		case "$INITRD_MAKER" in
+		initramfs|dracut)
+			;;
+
+		*)
+			echo "$0": Unrecognized INITRD_MAKER $INITRD_MAKER >&2
+			exit 1
+			;;
+		esac
+		echo "---- zfsbootmenu-installer: Compile OpenZFS: configure, please wait..."
+		cd $ZFS_DIR
+		./configure --enable-systemd --enable-silent-rules --silent || exit 1
+		echo "---- zfsbootmenu-installer: Compile OpenZFS: compiling, please wait..."
+		make -j8 native-deb-utils || exit 1
+
+		if test "$INITRD_MAKER" '=' initramfs; then
+			cd ..
+			rm -f openzfs-zfs-dracut_*.deb > /dev/null 2>&1
+		else
+			cd ..
+			rm -f openzfs-zfs-initramfs_*.deb > /dev/null 2>&1
+		fi
+		exit 0
+		;;
+
+	# Download OpenZFS and build it
+	# locally.
+	# Give INITRD_MAKER as either initramfs
+	# or dracut.
+	openzfs-debian-derivative-download-build)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": requires INITRD_MAKER argument >&2
+			exit 1
+		fi
+		INITRD_MAKER="$2"
+
+		SRCDIR="$LOCALSRCDIR"/openzfs
+		CACHE=$SRCDIR/cache
+		ZFS_VER="`"$0" openzfs-info dir`"
+
+		echo "---- zfsbootmenu-installer: Debian derivative: Download and build OpenZFS."
+
+		# Download
+		"$0" mkdir-p $CACHE || exit 1
+		"$0" openzfs-download-validate "$CACHE" || exit 1
+
+		# Move it to its own directory.
+		"$0" mkdir-p $SRCDIR/build-$ZFS_VER || exit 1
+		mv $CACHE/$ZFS_VER $SRCDIR/build-$ZFS_VER/$ZFS_VER || exit 1
+
+		# Install dependencies
+		"$0" openzfs-debian-derivative-install-deps || exit 1
+
+		# Compile
+		"$0" openzfs-debian-derivative-compile "$SRCDIR/build-$ZFS_VER/$ZFS_VER" "$INITRD_MAKER" || exit 1
+
+		exit 0
+		;;
+
+	# Install our OpenZFS from the
+	# above.
+	openzfs-debian-derivative-install)
+		exit 0
+		;;
+
+	################################################# OpenZFS Direct Compile
 
 	################################################# ISO-squashfs Install support
 
