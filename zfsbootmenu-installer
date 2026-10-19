@@ -1749,7 +1749,10 @@ SCRIPT
 		if which sddm > /dev/null 2>&1; then
 			"$0" typical-sddm-enable-auto-login /etc/sddm.conf.d "$USERNAME"
 		fi
-		# TODO LightDM
+		if test -d /etc/lightdm; then
+			"$0" typical-lightdm-enable-auto-login /etc/lightdm "$USERNAME"
+		fi
+		# TODO SLiM
 		exit 0
 		;;
 
@@ -1791,6 +1794,36 @@ SETTINGS
 Relogin=false
 Session=$DESKTOP
 User=$USERNAME
+CONF
+		exit 0
+		;;
+
+	typical-lightdm-enable-auto-login)
+		if test X${3+set} '!=' Xset; then
+			echo "$0": requires DIR USERNAME >&2
+			exit 1
+		fi
+		DIR="$2"
+		USERNAME="$3"
+		echo "---- zfsbootmenu-installer: typical: Enable LightDM auto-login: $DIR"
+		if test -f "$DIR"/lightdm.conf; then
+			if mv "$DIR"/lightdm.conf "$DIR"/lightdm.conf.bak; then
+				cat "$DIR"/lightdm.conf.bak | \
+				sed -e 's@^\([ 	]*autologin-user[ 	]*=.*\)$@# \1@' | \
+				sed -e 's@^\([ 	]*autologin-user-timeout[ 	]*=.*\)$@# \1@' \
+					> "$DIR"/lightdm.conf
+				if test '!' -f "$DIR"/lightdm.conf; then
+					mv "$DIR"/lightdm.conf.bak "$DIR"/lightdm.conf
+					exit 0
+				fi
+			fi
+		else
+			echo > "$DIR"/lightdm.conf
+		fi
+		cat >> "$DIR/lightdm.conf" <<CONF
+[Seat:*]
+autologin-user=$USERNAME
+autologin-user-timeout=0
 CONF
 		exit 0
 		;;

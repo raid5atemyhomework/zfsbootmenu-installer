@@ -517,6 +517,33 @@ It seems what we need to remove are:
 
 -----------------------------------------
 
+elementary OS
+
+elementary OS is an Ubuntu derivative.
+
+The big pain point is that the main site gives you a
+guilt donation button to download, and generates a random
+download link each time.
+There is no iso signing key, like PureOS, leaving us to
+manually hash and hope we didn't get a bad ISO the first
+time we tried (you know, like ssh server identifiers).
+
+There is a mirror here that just gives a straight
+download:
+
+* https://osarchive.sda1.eu/elementary-os
+  - http://dl.sda1.eu/linux/elementary/elementaryos-8.1-stable-amd64.20260219.iso
+
+The Live ISO seems like a straightforward Debian-derivative
+Live ISO, like SlimbookOS or Pop!_OS, with a nice decent
+filesystem.manifest-remove and a single filesystem.squashfs.
+Casual inspection suggests the OS has zfs kernel modules
+included with the kernel, hopefully this is similar to the
+TUXEDO-OS situation with zfs kernel modules signed with the
+build key.
+
+-----------------------------------------
+
 Trisquel
 
 Trisquel is an Ubuntu derivative, again with its own
