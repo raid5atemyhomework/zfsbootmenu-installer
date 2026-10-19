@@ -508,6 +508,13 @@ Instead, do:
 
     debootstrap crimson work https://repo.pureos.net/pureos
 
+Of course, PureOS does have an ISO, and we can use that
+path.
+It seems what we need to remove are:
+
+	adwaita-qt
+	pureos-live-settings
+
 -----------------------------------------
 
 Trisquel

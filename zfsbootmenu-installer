@@ -38,7 +38,7 @@
 
 #
 
-VERSION=1.0.2
+VERSION=1.0.3
 
 # Convenient names.
 # These are NOT intended to be modifiable.
@@ -947,6 +947,7 @@ Debian13
 SlimbookOS26
 Pop_OS24.04
 TUXEDO-OS_202609
+PureOS11
 DISTROS
 			exit 0
 		fi
@@ -1230,6 +1231,48 @@ DESC
 						echo "---- zfsbootmenu-installer: Install TUXEDO-OS_202609 (in chroot)"
 						exec "$0" tuxedo-install-chroot ubuntu noble
 						;;
+				esac
+				;;
+
+			PureOS11)
+				case "$SUBCOMMAND" in
+					preview)
+						cat <<DESC
+Pure OS 11 Crimson
+
+Pure OS is a Debian derivative created by
+Purism as a pure, Free Software only
+GNU/Linux distribution for their laptops
+and beyond.
+The Free Software Foundation has endorsed
+this distribution.
+
+Installed with Gnome Shell.
+
+As it uses only Free drivers, many wifi,
+bluetooth, and displays, especially in
+laptops not designed for Free drivers,
+will not work.
+DESC
+						;;
+
+					pre-install)
+						echo '---- zfsbootmenu-installer: Install PureOS11 (prepare)'
+						exec "$0" pure-download-validate \
+							"crimson" 2026.05 11 20260515 \
+							'2d27e60b22ffa5a336118817dc4b24a27faa303261768d3634ea4d5ec83b6365'
+						;;
+
+					install-outside)
+						echo '---- zfsbootmenu-installer: Install PureOS11'
+						exec "$0" iso-unsquash filesystem.squashfs "$DIR"
+						;;
+
+					install-chroot)
+						echo '---- zfsbootmenu-installer: Install PureOS11 (in chroot)'
+						exec "$0" pure-install-chroot 11
+						;;
+
 				esac
 				;;
 
@@ -1521,8 +1564,13 @@ SCRIPT
 
 	# Install ZFS when the distro has no zfs-dkms
 	debian-derivative-install-chroot-zfsless-zfs)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": requires INITRD_MAKER argument >&2
+			exit 1
+		fi
+		INITRD_MAKER="$2"
 		echo "---- zfsbootmenu-installer: debian derivative: ZFSless ZFS"
-		"$0" openzfs-debian-derivative-nikkei || exit 1
+		"$0" openzfs-debian-derivative-nikkei $INITRD_MAKER || exit 1
 		exec "$0" zas-typical-nikkei
 		;;
 
@@ -2136,7 +2184,7 @@ SOURCES
 				grub2-efi-amd64 os-prober \
 				calamares casper \
 				; do
-			apt-mark auto "$TO_REMOVE" > /dev/null
+			apt-mark auto "$TO_REMOVE" > /dev/null 2>&1
 		done
 
 		# If there is a filesystem.manifest-remove,
@@ -2530,6 +2578,71 @@ CONF
 		exec "$0" tuxedo-enable-auto-login
 		;;
 
+	# PureOS
+
+	pure-download-validate)
+		if test X${6+set} '!=' Xset; then
+			echo require RELEASE YEARMONTH RNUM DATE HASH arguments >&2
+			exit 1
+		fi
+		RELEASE="$2"
+		YEARMONTH="$3"
+		RNUM="$4"
+		DATE="$5"
+		HASH="$6"
+
+		"$0" ensure wget || exit 1
+		"$0" ensure sha256sum || exit 1
+
+		"$0" mkdir-p $WORKDIR/prepare
+
+		echo "---- zfsbootmenu-installer: PureOS$RNUM: Download ISO"
+		wget "https://storage.puri.sm/pureos/images/${RELEASE}/${YEARMONTH}/gnome/pureos-${RNUM}-gnome-live-${DATE}_amd64.iso" \
+			--output-document=$WORKDIR/installer.iso || exit 1
+
+		echo "---- zfsbootmenu-installer: PureOS$RNUM: Validate ISO"
+		cd $WORKDIR || exit 1
+		echo "$HASH" installer.iso | sha256sum -c
+		if test $? '!=' 0; then
+			echo "$0": Validation failed >&2
+			exit 1
+		fi
+
+		echo "---- zfsbootmenu-installer: PureOS$RNUM: Extracting from ISO"
+		exec "$0" iso-extract-from-installer casper filesystem.squashfs
+		;;
+
+	pure-install-chroot-clean-live)
+		if test X${2+set} '!=' Xset; then
+			echo require RNUM arguments >&2
+			exit 1
+		fi
+		RNUM="$2"
+		echo "---- zfsbootmenu-installer: PureOS$RNUM: Mark Live packages for later removal"
+		for KILL_PKG in adwaita-qt pureos-live-settings; do
+			apt-mark auto $KILL_PKG > /dev/null 2>&1
+		done
+		exit 0
+		;;
+
+	pure-install-chroot)
+		if test X${2+set} '!=' Xset; then
+			echo require RNUM arguments >&2
+			exit 1
+		fi
+		RNUM="$2"
+
+		"$0" pure-install-chroot-clean-live "$RNUM" || exit 1
+		"$0" iso-debian-derivative-install-chroot-pre-zfs-dkms || exit 1
+		#
+		"$0" debian-derivative-install-chroot-zfsless-zfs initramfs || exit 1
+		#
+		"$0" iso-debian-derivative-install-chroot-post-zfs-dkms || exit 1
+		"$0" iso-debian-derivative-install-chroot-final-cleanup || exit 1
+		"$0" typical-enable-auto-login
+		exit 0
+		;;
+
 	# zfsbootmenu-installer hooks
 
 	# Hook this on adding a new file, or modifying
@@ -2712,6 +2825,7 @@ SCRIPT
 		# Delete the ZFS libpam, it's more trouble than
 		# it's worth.
 		rm -f openzfs-libpam-zfs_* > /dev/null 2>&1
+		rm -f openzfs-libpam-zfs-dbgsym_* > /dev/null 2>&1
 		exit 0
 		;;
 
@@ -3096,7 +3210,7 @@ SCRIPT
 		if zfs list $TANK_NAME/ROOT/"$DISTRO" > /dev/null 2>&1; then
 			echo "$0": Boot environment exists: $DISTRO >&2
 			echo "$0": If you want to force-reinstall it, destroy it first: >&2
-			echo "$0":'     'zfs destroy -R $TANK_NAME/ZROOT/$DISTRO >&2
+			echo "$0":'     'zfs destroy -r $TANK_NAME/ZROOT/$DISTRO >&2
 			exit 1
 		fi
 		exit 0
@@ -3295,7 +3409,7 @@ SCRIPT
 			echo "$0": Install "$DISTRO" failed, destroying. >&2
 			umount -qnR $WORKDIR/mnt
 			if zfs list $TANK_NAME/ROOT/"$DISTRO" > /dev/null 2>&1; then
-				zfs destroy -R $TANK_NAME/ROOT/"$DISTRO" > /dev/null 2>&1
+				zfs destroy -r $TANK_NAME/ROOT/"$DISTRO" > /dev/null 2>&1
 			fi
 			exit $EXIT_CODE
 		fi
@@ -3808,7 +3922,7 @@ MSG
 		shift
 		# Some shells might make "$@" into
 		# "" if there are no more arguments.
-		if X${1+set} '!=' Xset; then
+		if test X${1+set} '!=' Xset; then
 			# out of arguments.
 			exit 1
 		fi
