@@ -1519,6 +1519,13 @@ SCRIPT
 		exec dpkg-reconfigure keyboard-configuration tzdata locales
 		;;
 
+	# Install ZFS when the distro has no zfs-dkms
+	debian-derivative-install-chroot-zfsless-zfs)
+		echo "---- zfsbootmenu-installer: debian derivative: ZFSless ZFS"
+		"$0" openzfs-debian-derivative-nikkei || exit 1
+		exec "$0" zas-typical-nikkei
+		;;
+
 	debian-derivative-install-chroot-more)
 		echo "---- zfsbootmenu-installer: debian derivative: Installing additional."
 		if test -f /usr/share/systemd/tmp.mount; then
@@ -2694,6 +2701,7 @@ SCRIPT
 		echo "---- zfsbootmenu-installer: Compile OpenZFS: compiling, please wait..."
 		make -j8 native-deb-utils || exit 1
 
+		# Delete the INITRD_MAKER that is not selected.
 		if test "$INITRD_MAKER" '=' initramfs; then
 			cd ..
 			rm -f openzfs-zfs-dracut_*.deb > /dev/null 2>&1
@@ -2701,6 +2709,9 @@ SCRIPT
 			cd ..
 			rm -f openzfs-zfs-initramfs_*.deb > /dev/null 2>&1
 		fi
+		# Delete the ZFS libpam, it's more trouble than
+		# it's worth.
+		rm -f openzfs-libpam-zfs_* > /dev/null 2>&1
 		exit 0
 		;;
 
@@ -2741,10 +2752,155 @@ SCRIPT
 	# Install our OpenZFS from the
 	# above.
 	openzfs-debian-derivative-install)
+		ZFS_VER="`"$0" openzfs-info dir`"
+		cd "$LOCALSRCDIR/openzfs/build-$ZFS_VER" || exit 1
+		exec apt install --fix-missing -y ./openzfs-*.deb
+		;;
+
+	# Just complete the downloading, validation, compilation
+	# and installation of OpenZFS.
+	openzfs-debian-derivative-nikkei)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": requires INITRD_MAKER argument >&2
+			exit 1
+		fi
+		INITRD_MAKER="$2"
+		"$0" openzfs-debian-derivative-download-build "$INITRD_MAKER" || exit 1
+		"$0" openzfs-debian-derivative-install || exit 1
 		exit 0
 		;;
 
 	################################################# OpenZFS Direct Compile
+
+	################################################# zfs-auto-snapshot installation
+
+	# Unfortunately, zfs-auto-snapshot does not
+	# have a tarball.
+	# The nearest you can get is a github zip
+	# file, but we don't know if github generates
+	# it dynamically; if github generates it
+	# dynamically and they change tooling, the
+	# exact bytes might get changed.
+	# Since we need to validate that the
+	# zfs-auto-snapshot is what we expect,
+	# we focus on just the biggest file, the
+	# actual zfs-auto-snapshot, and embed the
+	# crontab files ourselves.
+	zas-info)
+		case $2 in
+		url)
+			echo 'https://raw.githubusercontent.com/zfsonlinux/zfs-auto-snapshot/92db087bb019957166ee70c88c6c967e5fd28a70/src/zfs-auto-snapshot.sh'
+			;;
+
+		hash)
+			echo '70d1974c21d50f43dd0dd768544fae42302489fb2d6e42d77973b77e15056967'
+			;;
+
+		date)
+			echo '2019-09-30'
+			;;
+
+		*)
+			echo "$0": unrecognized subcommand "$2" >&2
+			exit 1
+			;;
+
+		esac
+		exit 0
+		;;
+
+	# Download and validate the core
+	# script, and generate the
+	# crontab files.
+	zas-download-validate)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": requires DIR argument >&2
+			exit 1
+		fi
+		DIR="$2"
+		"$0" ensure wget || exit 1
+
+		cd "$DIR" || exit 1
+
+		echo '---- zfsbootmenu-installer: zfs-auto-snapshot download and validate'
+		wget --no-verbose "`"$0" zas-info url`" --output-document=./zfs-auto-snapshot || exit 1
+		echo "`"$0" zas-info hash`" zfs-auto-snapshot | sha256sum -c
+		if test $? '!=' 0; then
+			rm ./zfs-auto-snapshot
+			echo "$0": Validation failed >&2
+			exit 1
+		fi
+		chmod 755 ./zfs-auto-snapshot || exit 1
+
+		cat > ./zfs-auto-snapshot.cron.frequent <<SCRIPT
+PATH="/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin"
+
+*/15 * * * * root which zfs-auto-snapshot > /dev/null || exit 0 ; zfs-auto-snapshot --quiet --syslog --label=frequent --keep=4 //
+SCRIPT
+		for SPEC in hourly/24 daily/31 weekly/8 monthly/12; do
+			LABEL=`echo $SPEC | sed -e 's@/.*$@@'`
+			KEEP=`echo $SPEC | sed -e 's@^[^/]*/@@'`
+			cat > ./zfs-auto-snapshot.cron.$LABEL <<SCRIPT
+#!/bin/sh
+
+# Only call zfs-auto-snapshot if it's available
+which zfs-auto-snapshot > /dev/null || exit 0
+
+exec zfs-auto-snapshot --quiet --syslog --label=$LABEL --keep=$KEEP //
+SCRIPT
+			chmod 755 ./zfs-auto-snapshot.cron.$LABEL || exit 1
+		done
+		exit 0
+		;;
+
+	zas-typical-download-install)
+		INSTALLDIR=/usr/local/lib/zfs-auto-snapshot
+		"$0" mkdir-p $INSTALLDIR || exit 1
+		"$0" zas-download-validate $INSTALLDIR || exit 1
+
+		"$0" mkdir-p /usr/local/sbin || exit 1
+		ln -s $INSTALLDIR/zfs-auto-snapshot /usr/local/sbin || exit 1
+		chmod 755 /usr/local/sbin/zfs-auto-snapshot || exit 1
+
+		"$0" mkdir-p /usr/local/bin || exit 1
+		cat > /usr/local/bin/zfs-auto-snapshot-activate <<SCRIPT
+#! /bin/sh
+echo zfs-auto-snapshot-activate
+mkdir -p /etc/cron.d || exit 1
+ln -sf	$INSTALLDIR/zfs-auto-snapshot.cron.frequent \
+	/etc/cron.d/zfs-auto-snapshot || exit 1
+for LABEL in hourly daily weekly monthly; do
+	mkdir -p /etc/cron.\$LABEL || exit 1
+	ln -sf	$INSTALLDIR/zfs-auto-snapshot.cron.\$LABEL \
+		/etc/cron.\$LABEL/zfs-auto-snapshot || exit 1
+	chmod 755 /etc/cron.\$LABEL/zfs-auto-snapshot || exit 1
+done
+exit 0
+SCRIPT
+		chmod 755 /usr/local/bin/zfs-auto-snapshot-activate || exit 1
+
+		cat > /usr/local/bin/zfs-auto-snapshot-deactivate <<SCRIPT
+#! /bin/sh
+echo zfs-auto-snapshot-deactivate
+rm -f /etc/cron.d/zfs-auto-snapshot || exit 1
+for LABEL in hourly daily weekly monthly; do
+	rm -f /etc/cron.\$LABEL/zfs-auto-snapshot || exit 1
+done
+exit 0
+SCRIPT
+		chmod 755 /usr/local/bin/zfs-auto-snapshot-deactivate || exit 1
+
+		exit 0
+		;;
+
+	# Just download, validate, install, and activate
+	# zfs-auto-snapshot
+	zas-typical-nikkei)
+		"$0" zas-typical-download-install || exit 1
+		exec /usr/local/bin/zfs-auto-snapshot-activate
+		;;
+
+	################################################# zfs-auto-snapshot installation
 
 	################################################# ISO-squashfs Install support
 
