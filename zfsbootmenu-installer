@@ -2301,6 +2301,9 @@ SOURCES
 		;;
 
 	tuxedo-install-chroot-clean-live)
+		# Somehow this gets lost?  Sigh.
+		cp /var/lib/flatpak/repo/config /flatpak-repo-config.bak
+		cp /var/lib/flatpak/repo/flathub.trustedkeys.gpg /flatpak-repo-flathub.trustedkeys.gpg.bak
 		# Clean up the dirt in the Live
 		echo "---- zfsbootmenu-installer: TUXEDO-OS: Remove FLL (Live environment), Installer, and Chroot Helper"
 		for FLL_SERVICE in \
@@ -2325,18 +2328,27 @@ SOURCES
 				calamares \
 				calamares-branding-tuxedo \
 				tuxedo-repair \
+				virt-what \
 				; do
 			echo "---- zfsbootmenu-installer: TUXEDO-OS: Try remove $FLL_PKG"
 			# Say yes to anything they want to
 			# ask, just get it out.
 			yes | apt remove "$FLL_PKG"
 		done
+		echo "---- zfsbootmenu-installer: TUXEDO-OS: FLL cleanup and fixing"
+		# Fixups, as seen from the Tuxedo custom
+		# calamares fll* scripts.
+		rm /etc/sudoers.d/15_TUXEDO-OS
+		rm -rf /fll > /dev/null 2>&1
+		rm -f /etc/systemd/system/getty@.service > /dev/null 2>&1
+		rm -f /etc/systemd/system/autovt@.service > /dev/null 2>&1
+		ln -fs /lib/systemd/system/autovt@.service /etc/systemd/system/getty.target.wants/getty@tty1.service > /dev/null 2>&1
+		rm -f /root/.hushlogin > /dev/null 2>&1
+		rm -rf /usr/share/tuxedo/packages > /dev/null 2>&1
 
 		# Remove existing 'tux' user and
 		# make sure /home is empty
 		echo "---- zfsbootmenu-installer: TUXEDO-OS: Remove 'tux' user"
-		# Remove superuser privileges
-		rm /etc/sudoers.d/15_TUXEDO-OS
 		# deluser might scan /proc, which is
 		# the current user's environment in
 		# whatever Boot Environment or Live
@@ -2358,7 +2370,23 @@ SOURCES
 		exit 0
 		;;
 
+	tuxedo-install-chroot-final-fixup)
+		cp /flatpak-repo-config.bak /var/lib/flatpak/repo/config
+		cp /flatpak-repo-flathub.trustedkeys.gpg.bak /var/lib/flatpak/repo/flathub.trustedkeys.gpg
+		exit 0
+		;;
+
 	tuxedo-enable-auto-login)
+		USERNAME="`cat /usr/local/username`"
+		# The calamares install also adds a /etc/sddm.conf
+		# file.
+		cat > /etc/sddm.conf <<CONF
+[Autologin]
+Relogin=false
+Session=plasma
+User=$USERNAME
+CONF
+
 		# The installed /etc/sddm.conf.d/kde_settings.conf
 		# here already has an [Autologin] section on
 		# TUXEDO OS 202609161651.
@@ -2396,7 +2424,6 @@ SOURCES
 
 		if test $GOT_EXPECTED '=' yes; then
 			echo "---- zfsbootmenu-installer: TUXEDO-OS: Filling in User= setting in $SETTINGS"
-			USERNAME="`cat /usr/local/username`"
 			mv $SETTINGS $SETTINGS.bak || exit 1
 			cat $SETTINGS.bak \
 			| sed -e 's@^[	 ]*User[	 ]*=[	 ]*$@User='"$USERNAME"'@' \
@@ -2465,7 +2492,10 @@ SOURCES
 
 		# We removed FLL packages,
 		# let's clean up.
-		"$0" iso-debian-derivative-install-chroot-final-cleanup
+		"$0" iso-debian-derivative-install-chroot-final-cleanup || exit 1
+
+		# Fix up some things that magically get broken
+		"$0" tuxedo-install-chroot-final-fixup || exit 1
 
 		exec "$0" tuxedo-enable-auto-login
 		;;
