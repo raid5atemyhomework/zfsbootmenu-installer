@@ -1228,7 +1228,7 @@ DESC
 
 					install-chroot)
 						echo "---- zfsbootmenu-installer: Install TUXEDO-OS_202609 (in chroot)"
-						exec "$0" tuxedo-install-chroot ubuntu
+						exec "$0" tuxedo-install-chroot ubuntu noble
 						;;
 				esac
 				;;
@@ -2239,6 +2239,67 @@ TOML
 			tuxedo.amd64
 		;;
 
+	# The TUXEDO OS Live CD comes with a very
+	# strange set of .list files in its
+	# /etc/apt/sources.list.d/ and doesn't
+	# match what is in a "real" install from
+	# the same Live CD.
+	# Clear out that dir and reset its contents
+	# to what we have in the "real" install
+	# from a virtual machine.
+	tuxedo-reset-sources)
+		if test X${3+set} '!=' Xset; then
+			echo "$0": requires BASE RELEASE argument >&2
+			exit 1
+		fi
+		BASE="$2"
+		RELEASE="$3"
+		rm -rf /etc/apt/sources.list.d /etc/apt/sources.list > /dev/null 2>&1
+		"$0" mkdir-p /etc/apt/sources.list.d || exit 1
+		ln -s /usr/share/tuxedo-repository/tuxedo-computers.sources /etc/apt/sources.list.d/tuxedo-computers.sources
+		cat > /etc/apt/sources.list.d/tuxedo-os-plasma.sources <<SOURCES
+Types: deb
+URIs: https://txos.tuxedocomputers.com/$BASE-plasma
+Suites: $RELEASE $RELEASE-updates
+Components: main
+Signed-by: /usr/share/keyrings/tuxedo-archive-keyring.gpg
+SOURCES
+		cat > /etc/apt/sources.list.d/tuxedo-os.sources <<SOURCES
+Types: deb
+URIs: https://txos.tuxedocomputers.com/$BASE
+Suites: $RELEASE
+Components: main
+Signed-by: /usr/share/keyrings/tuxedo-archive-keyring.gpg
+
+Types: deb
+URIs: https://txos-extra.tuxedocomputers.com/$BASE
+Suites: $RELEASE
+Components: main
+Signed-by: /usr/share/keyrings/tuxedo-archive-keyring.gpg
+SOURCES
+		if test "$BASE" '=' ubuntu; then
+			cat > /etc/apt/sources.list.d/tuxedo-ubuntu-mirrors.sources <<SOURCES
+Types: deb
+URIs: https://mirrors.tuxedocomputers.com/ubuntu/mirror/archive.ubuntu.com/ubuntu
+Suites: $RELEASE $RELEASE-updates
+Components: main restricted universe multiverse
+Signed-by: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+
+Types: deb
+URIs: https://mirrors.tuxedocomputers.com/ubuntu/mirror/security.ubuntu.com/ubuntu
+Suites: $RELEASE-security
+Components: main restricted universe multiverse
+Signed-by: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+SOURCES
+		else
+			echo "$0" Unknown base $BASE >&2
+			exit 1
+		fi
+
+		apt update || exit 1
+		exit 0
+		;;
+
 	tuxedo-install-chroot-clean-live)
 		# Clean up the dirt in the Live
 		echo "---- zfsbootmenu-installer: TUXEDO-OS: Remove FLL (Live environment), Installer, and Chroot Helper"
@@ -2274,6 +2335,8 @@ TOML
 		# Remove existing 'tux' user and
 		# make sure /home is empty
 		echo "---- zfsbootmenu-installer: TUXEDO-OS: Remove 'tux' user"
+		# Remove superuser privileges
+		rm /etc/sudoers.d/15_TUXEDO-OS
 		# deluser might scan /proc, which is
 		# the current user's environment in
 		# whatever Boot Environment or Live
@@ -2354,11 +2417,13 @@ TOML
 		;;
 
 	tuxedo-install-chroot)
-		if test X${2+set} '!=' Xset; then
-			echo "$0": requires BASE argument >&2
+		if test X${3+set} '!=' Xset; then
+			echo "$0": requires BASE RELEASE argument >&2
 			exit 1
 		fi
-		BASE=$2
+		BASE="$2"
+		RELEASE="$3"
+		"$0" tuxedo-reset-sources "$BASE" "$RELEASE" || exit 1
 
 		"$0" tuxedo-install-chroot-clean-live || exit 1
 
