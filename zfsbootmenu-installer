@@ -2122,10 +2122,10 @@ SOURCES
 		# time on ZFS, too.
 		# Do it RIGHT HERE, RIGHT NOW because
 		# it slows down some apt calls.
-		yes | apt remove --purge os-prober > /dev/null 2>&1
+		yes | apt remove os-prober > /dev/null 2>&1
 		# ~Every LiveCD uses calamares in some
 		# capacity.
-		yes | apt remove --purge calamares > /dev/null 2>&1
+		yes | apt remove calamares > /dev/null 2>&1
 
 		"$0" debian-derivative-prepare || exit 1
 		apt install -y --no-install-recommends dkms || exit 1
@@ -2155,7 +2155,7 @@ SOURCES
 
 	iso-debian-derivative-install-chroot-final-cleanup)
 		echo "---- zfsbootmenu-installer: ISO: debian derivative: clean up unneeded packages"
-		yes | apt autoremove --purge
+		yes | apt autoremove
 		yes | apt autoclean
 		exit 0
 		;;
@@ -2201,7 +2201,7 @@ TOML
 	pop-install-chroot)
 		echo "---- zfsbootmenu-installer: Removing installer packages..."
 		for KILL_PKG in pop-installer pop-installer-casper pop-installer-session; do
-			yes | apt remove --purge $KILL_PKG > /dev/null 2>&1
+			yes | apt remove $KILL_PKG > /dev/null 2>&1
 		done
 		"$0" iso-debian-derivative-install-chroot-pre-zfs-dkms || exit 1
 		apt install -y zfs-dkms \
@@ -2329,7 +2329,7 @@ SOURCES
 			echo "---- zfsbootmenu-installer: TUXEDO-OS: Try remove $FLL_PKG"
 			# Say yes to anything they want to
 			# ask, just get it out.
-			yes | apt remove --purge "$FLL_PKG"
+			yes | apt remove "$FLL_PKG"
 		done
 
 		# Remove existing 'tux' user and
