@@ -38,7 +38,7 @@
 
 #
 
-VERSION=1.0.1
+VERSION=1.0.2
 
 # Convenient names.
 # These are NOT intended to be modifiable.
@@ -2098,6 +2098,40 @@ SOURCES
 	# Call this before installing ZFS
 	# inside DKMS.
 	iso-debian-derivative-install-chroot-pre-zfs-dkms)
+		# Mark these packages for removal.
+		# We don't need no grub nor os-prober, and
+		# Calamares is the sterotypical installer,
+		# while Casper is a tool to create an
+		# in-memory filesystem for your Live
+		# environment.
+		#
+		# Don't remove them, because some OSs break
+		# if you explicitly remove them:
+		#
+		# * TUXEDO-OS
+		#   * tuxedo-base-files depends on grub-common,
+		#     and it contains vital files like
+		#     /usr/share/tuxedo/sddm-hook, which hooks
+		#     at each dpkg invocation.
+		#
+		# Mark them as auto instead in case the
+		# Live has them as manual, so that at the
+		# end we do `autoremove` and remove packages,
+		# but only if vital OS packages like the
+		# TUXEDO-OS case above don't keep them
+		# installed.
+		echo "---- zfsbootmenu-installer: ISO: Debian derivative: Scheduling removal of packages unneeded for non-GRUB root-on-ZFS."
+		for TO_REMOVE in \
+				btrfs-progs btrfsd btrfsmaintenance \
+				grub-probe grub-common \
+				grub-efi grub-efi-amd64 \
+				grub2-common grub2 grub2-efi \
+				grub2-efi-amd64 os-prober \
+				calamares casper \
+				; do
+			apt-mark auto "$TO_REMOVE" > /dev/null
+		done
+
 		# If there is a filesystem.manifest-remove,
 		# mark them as auto-installed at this point.
 		if test -f /filesystem.manifest-remove; then
@@ -2113,19 +2147,6 @@ SOURCES
 		# If these error, it's fine, we ignore it.
 		systemctl disable casper-md5check.service > /dev/null 2>&1
 		systemctl disable casper.service > /dev/null 2>&1
-		# Some LiveCDs might have os-prober so
-		# they can offer to multi-boot.
-		# We expect all our OSs to be in separate
-		# ZFS datasets, and ZFSBootMenu will do
-		# that probing at each boot anyway, so
-		# remove it; os-prober takes a LOOOONG
-		# time on ZFS, too.
-		# Do it RIGHT HERE, RIGHT NOW because
-		# it slows down some apt calls.
-		yes | apt remove os-prober > /dev/null 2>&1
-		# ~Every LiveCD uses calamares in some
-		# capacity.
-		yes | apt remove calamares > /dev/null 2>&1
 
 		"$0" debian-derivative-prepare || exit 1
 		apt install -y --no-install-recommends dkms || exit 1
@@ -2139,6 +2160,7 @@ SOURCES
 	# - kernel module
 	# - zpool, zfs, and other bins
 	# - zfs-auto-snapshot
+	# - zfs-initramfs or zfs-dracut
 
 	# Install via the ISO-squashfs path,
 	# for Debian-derivative distros.
@@ -2201,7 +2223,7 @@ TOML
 	pop-install-chroot)
 		echo "---- zfsbootmenu-installer: Removing installer packages..."
 		for KILL_PKG in pop-installer pop-installer-casper pop-installer-session; do
-			yes | apt remove $KILL_PKG > /dev/null 2>&1
+			apt-mark auto $KILL_PKG > /dev/null 2>&1
 		done
 		"$0" iso-debian-derivative-install-chroot-pre-zfs-dkms || exit 1
 		apt install -y zfs-dkms \
@@ -2216,7 +2238,7 @@ TOML
 		# self-destruct instead.
 		apt-mark auto kernelstub
 
-		"$0" iso-debian-derivative-install-chroot-final-cleanup
+		"$0" iso-debian-derivative-install-chroot-final-cleanup || exit 1
 		exec "$0" pop-cosmic-enable-auto-login
 		;;
 
@@ -2365,7 +2387,8 @@ SOURCES
 		mkdir /home > /dev/null 2>&1
 
 		# Real installs include these.
-		apt install -y tuxedo-base-files tuxedo-theme-plasma || exit 1
+		echo "---- zfsbootmenu-installer: TUXEDO-OS: Ensure TUXEDO configuration."
+		apt install -y tuxedo-common-settings tuxedo-base-files tuxedo-theme-plasma || exit 1
 
 		exit 0
 		;;
