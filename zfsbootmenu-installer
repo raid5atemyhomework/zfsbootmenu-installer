@@ -1222,7 +1222,7 @@ DESC
 						;;
 
 					install-outside)
-						echo "---- zfsbootmenu-installer: Install TUXEDO-OS_202609 (prepare)"
+						echo "---- zfsbootmenu-installer: Install TUXEDO-OS_202609"
 						exec "$0" iso-unsquash tuxedo.amd64 "$DIR"
 						;;
 
