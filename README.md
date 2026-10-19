@@ -4,6 +4,13 @@
 * First-class Root-on-ZFS
 * Secure Boot
 * Boot Environments
+* Support for multiple distributions
+  * Ubuntu / KUbuntu
+  * Debian
+  * SlimbookOS
+  * Pop!\_OS
+  * TUXEDO-OS
+  * PureOS
 
 `zfsbootmenu-installer` is a shell script for installing Root-on-ZFS
 setups for a small handful of GNU/Linux distributions.
