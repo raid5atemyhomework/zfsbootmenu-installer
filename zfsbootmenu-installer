@@ -1516,7 +1516,7 @@ SCRIPT
 		# locale-gen as many tools assume it exists.
 		locale-gen en_US.UTF-8
 		:
-		exec dpkg-reconfigure keyboard-configuration locales tzdata
+		exec dpkg-reconfigure keyboard-configuration tzdata locales
 		;;
 
 	debian-derivative-install-chroot-more)
@@ -2131,7 +2131,7 @@ SOURCES
 		apt install -y --no-install-recommends dkms || exit 1
 		"$0" dkms-sign-all-modules || exit 1
 		apt install -y sudo debconf || exit 1
-		exec dpkg-reconfigure keyboard-configuration locales tzdata
+		exec dpkg-reconfigure keyboard-configuration tzdata locales
 		;;
 
 	# In between these two functions, install
