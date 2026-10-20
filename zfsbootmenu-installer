@@ -2721,22 +2721,11 @@ CONF
 		DATE="$5"
 		HASH="$6"
 
-		"$0" ensure wget || exit 1
-		"$0" ensure sha256sum || exit 1
+		URL="https://storage.puri.sm/pureos/images/${RELEASE}/${YEARMONTH}/gnome/pureos-${RNUM}-gnome-live-${DATE}_amd64.iso"
 
-		"$0" mkdir-p $WORKDIR/prepare
-
-		echo "---- zfsbootmenu-installer: PureOS$RNUM: Download ISO"
-		wget "https://storage.puri.sm/pureos/images/${RELEASE}/${YEARMONTH}/gnome/pureos-${RNUM}-gnome-live-${DATE}_amd64.iso" \
-			--output-document=$WORKDIR/installer.iso || exit 1
-
-		echo "---- zfsbootmenu-installer: PureOS$RNUM: Validate ISO"
-		cd $WORKDIR || exit 1
-		echo "$HASH" installer.iso | sha256sum -c
-		if test $? '!=' 0; then
-			echo "$0": Validation failed >&2
-			exit 1
-		fi
+		echo "---- zfsbootmenu-installer: PureOS$RNUM: Download and validate ISO."
+		"$0" iso-download-validate-by-hash \
+			"$URL" "$HASH" || exit 1
 
 		echo "---- zfsbootmenu-installer: PureOS$RNUM: Extracting from ISO"
 		exec "$0" iso-extract-from-installer casper filesystem.squashfs
@@ -3209,6 +3198,37 @@ SCRIPT
 		rm -rf $WORKDIR/iso $WORKDIR/gnupg $WORKDIR/keyring.gpg > /dev/null 2>&1
 		echo "---- zfsbootmenu-installer: $ISO_BASENAME downloaded and valid!"
 
+		exit 0
+		;;
+
+	# Downloads an ISO file and validates
+	# it against the given hash.
+	# Puts the file into $WORKDIR/installer.iso
+	iso-download-validate-by-hash)
+		if test X"${3+set}" '=' set; then
+			echo "$0": requires URL HASH args >&2
+			exit 1
+		fi
+		URL="$2"
+		HASH="$3"
+		"$0" ensure sha256sum || exit 1
+		"$0" ensure wget || exit 1
+
+		NAME="`echo "$URL" | grep -o '[^/]*$'`"
+
+		echo "---- zfsbootmenu-installer: Downloading ISO $NAME"
+		wget "$URL" --output-document=$WORKDIR/installer.iso || exit 1
+		if test '!' -f $WORKDIR/installer.iso; then
+			echo "$0": Download failed >&2
+			exit 1
+		fi
+		echo "---- zfsbootmenu-installer: Validating ISO $NAME"
+		cd $WORKDIR || exit 1
+		echo "$HASH" installer.iso | sha256sum -c
+		if test $? '!=' 0; then
+			echo "$0": Validation failed >&2
+			exit 1
+		fi
 		exit 0
 		;;
 
