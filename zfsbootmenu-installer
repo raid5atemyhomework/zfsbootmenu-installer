@@ -38,7 +38,7 @@
 
 #
 
-VERSION=1.0.4
+VERSION=1.0.5
 
 # Convenient names.
 # These are NOT intended to be modifiable.
@@ -3613,6 +3613,7 @@ SCRIPT
 
 	clean-up-work)
 		umount -qnR $WORKDIR/mnt > /dev/null 2>&1
+		umount -qnR $WORKDIR > /dev/null 2>&1
 		rm -rf $WORKDIR > /dev/null 2>&1
 		exit 0
 		;;
@@ -4004,12 +4005,36 @@ Please try again.' 0 0
 			exit 1
 		fi
 		DISTRO="`cat $WORKDIR/config/distro`"
-		"$0" initialize-zpool-create && \
-		"$0" install-distro-core "$DISTRO"
-		if test $? '!=' 0; then
-			exit 1
-		fi
+		"$0" initialize-zpool-create || exit 1
+
+		# It's likely this is a Live environment,
+		# where the rootfs is an `overlayfs` in
+		# memory.
+		# In that case, we can't afford to download
+		# an .iso and extract the .squashfs, since
+		# that ends up in memory, which would cause
+		# problems.
+		# What we do is create a temporary dataset
+		# to host $WORKDIR, so that the download is
+		# stored on the installation disk.
+		# Also, delete $WORKDIR/esp
+		rm -rf $WORKDIR/esp > /dev/null 2>&1
+
+		# Move $WORKDIR/config out, create temp
+		# dataset.
+		mv $WORKDIR/config /work-config || exit 1
+		rm -rf $WORKDIR/* > /dev/null 2>&1
+		zfs create -o mountpoint=$WORKDIR -o canmount=on $TANK_NAME/tmp || exit 1
+		# Put back $WORKDIR/config
+		mv /work-config $WORKDIR/config || exit 1
+
+		"$0" install-distro-core "$DISTRO" || exit 1
 		umount -qnR $WORKDIR/mnt
+		umount -qnR $WORKDIR > /dev/null 2>&1
+
+		# Destroy temporary dataset.
+		zfs destroy -rf $TANK_NAME/tmp
+
 		zfs set mountpoint=/ $TANK_NAME/ROOT/"$DISTRO"
 		zfs set org.zfsbootmenu:active=on $TANK_NAME/ROOT/"$DISTRO"
 		zpool set bootfs=$TANK_NAME/ROOT/"$DISTRO" $TANK_NAME
@@ -4506,6 +4531,10 @@ Installation will continue successfully regardless.
 		"$0" initialize-processing $TANK_NAME
 		EXIT_CODE=$?
 		$0 clean-up-work
+		if test $EXIT_CODE '!=' 0; then
+			echo "$0": Failed, destroying zpool $TANK_NAME >&2
+			zpool destroy $TANK_NAME
+		fi
 		exit $EXIT_CODE
 		;;
 
