@@ -948,6 +948,7 @@ SlimbookOS26
 Pop_OS24.04
 TUXEDO-OS_202609
 PureOS11
+elementaryOS8
 DISTROS
 			exit 0
 		fi
@@ -1271,6 +1272,50 @@ DESC
 					install-chroot)
 						echo '---- zfsbootmenu-installer: Install PureOS11 (in chroot)'
 						exec "$0" pure-install-chroot 11
+						;;
+
+				esac
+				;;
+
+			elementaryOS8)
+				case "$SUBCOMMAND" in
+					preview)
+						cat <<DESC
+elementary OS 8.1 Circe
+
+elementary OS is an Ubuntu-derived
+distribution focused on designing a
+desktop with concision and immediate
+usability with minimal customization.
+
+It comes with its own desktop
+environment, Pantheon, which has
+close integration with elementary OS
+apps.
+DESC
+						;;
+
+					pre-install)
+						echo '---- zfsbootmenu-installer: Install elementaryOS8 (prepare)'
+						"$0" iso-download-validate-by-hash \
+							'http://dl.sda1.eu/linux/elementary/elementaryos-8.1-stable-amd64.20260219.iso' \
+							'bda93040d08c05911fb159f8150bf8f4ef2db6567ef6e2acd197cb6f395d3446' || exit 1
+						exec "$0" iso-extract-from-installer \
+							casper \
+							filesystem.squashfs \
+							filesystem.manifest-remove
+						;;
+
+					install-outside)
+						echo '---- zfsbootmenu-installer: Install elementaryOS8'
+						"$0" iso-unsquash filesystem.squashfs "$DIR" || exit 1
+						cp $WORKDIR/prepare/filesystem.manifest-remove "$DIR"/ || exit 1
+						exit 0
+						;;
+
+					install-chroot)
+						echo '---- zfsbootmenu-installer: Install elementaryOS8 (in chroot)'
+						exec "$0" iso-debian-derivative-install-chroot-nikkei 'inside' 'initramfs'
 						;;
 
 				esac
