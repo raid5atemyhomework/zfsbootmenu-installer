@@ -4574,6 +4574,80 @@ Installation will continue successfully regardless.
 
 	################################################# Boot Environment
 
+	################################################# Browse for ISO
+
+	select-iso)
+		if test X${2+set} '!=' Xset; then
+			CURPATH='/'
+		else
+			CURPATH="$2"
+		fi
+		if echo "$CURPATH" | grep '^/' > /dev/null 2>&1; then :; else
+			echo "$0": CURPATH must begin with /: "$CURPATH" >&2
+			exit 1
+		fi
+		DIR="$CURPATH"
+
+		"$0" ensure file
+
+		SEL=`ls "$DIR" | \
+		"$0" select-iso-filter "$CURPATH" | \
+		fzf --layout=reverse-list --no-sort --border --border-label="$DIR" --preview="$0"' preview-iso "'"$CURPATH"'" {}'`
+		if test X"$SEL" '=' X; then
+			exit 1
+		elif test X"$SEL" '=' 'X..'; then
+			PARENT="`echo "$CURPATH" | sed -e 's@/[^/]*$@@'`"
+			if test X"$PARENT" '=' 'X'; then
+				PARENT=/
+			fi
+			exec "$0" select-iso "$PARENT"
+		elif test -d "$CURPATH/$SEL"; then
+			if test X"$CURPATH" '=' 'X/'; then
+				exec "$0" select-iso "$CURPATH$SEL"
+			else
+				exec "$0" select-iso "$CURPATH/$SEL"
+			fi
+		fi
+		echo "$CURPATH/$SEL"
+		exit 0
+		;;
+
+	preview-iso)
+		if test X${3+set} '!=' Xset; then
+			echo "$0": requires CURPATH ITEM arg >&2
+			exit 1
+		fi
+		CURPATH="$2"
+		ITEM="$3"
+		if test X"$ITEM" '=' 'X..'; then
+			echo Go to parent directory
+		elif test -d "$CURPATH/$ITEM"; then
+			echo Enter directory "$ITEM"
+		else
+			file -b "$CURPATH/$ITEM" | sed -e 's@ 9660 CD-ROM filesystem data@@'
+		fi
+		;;
+
+	select-iso-filter)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": require CURPATH arg >&2
+			exit 1
+		fi
+		CURPATH="$2"
+		if test X"${CURPATH}" '!=' 'X/'; then
+			echo ..
+		fi
+		while read line; do
+			if test -d "$CURPATH/$line"; then
+				echo "$line"
+			elif echo "$line" | grep '\.iso$' > /dev/null 2>&1; then
+				echo "$line"
+			fi
+		done
+		;;
+
+	################################################# Browse for ISO
+
         ################################################# Main Menu
 
 	Initialize)
