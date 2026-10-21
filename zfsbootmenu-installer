@@ -38,7 +38,7 @@
 
 #
 
-VERSION=1.0.5
+VERSION=1.0.6
 
 # Convenient names.
 # These are NOT intended to be modifiable.
@@ -1149,14 +1149,22 @@ Slimbook branding.
 DESC
 						;;
 
+					pre-install)
+						echo "---- zfsbootmenu-installer: Install SlimbookOS26 (prepare)"
+						exec "$0" slimbook-download-validate '26' '-r4' \
+							'0287743f39ff482045ef8b6658678077a24a6c2e961262e6d10d2a4373223622'
+						;;
+
 					install-outside)
 						echo "---- zfsbootmenu-installer: Installing SlimbookOS26"
-						exec "$0" slimbook-install-outside resolute 26 "$DIR"
+						"$0" iso-unsquash filesystem.squashfs "$DIR" || exit 1
+						"$0" iso-unsquash filesystem.gnome.squashfs "$DIR" || exit 1
+						exit 0
 						;;
 
 					install-chroot)
 						echo "---- zfsbootmenu-installer: Installing SlimbookOS26 (in chroot)"
-						exec "$0" slimbook-install-chroot resolute 26
+						exec "$0" slimbook-install-chroot
 						;;
 
 				esac
@@ -2084,14 +2092,14 @@ SOURCES_LIST
 
 	# Slimbook OS
 
-	slimbook-install-outside)
+	slimbook-download-validate)
 		if test X${4+set} '!=' Xset; then
-			echo "$0": Need RELEASE YEAR DIR arguments >&2
+			echo "$0": Need YEAR REV HASH args >&2
 			exit 1
 		fi
-		RELEASE="$2"
-		YEAR="$3"
-		DIR="$4"
+		YEAR="$2"
+		REV="$3"
+		HASH="$4"
 
 		# Are we already running inside a
 		# ZFSBootMenu-managed Boot
@@ -2121,139 +2129,43 @@ Desktop):
 ' 0 0
 		fi
 
-		"$0" ensure debootstrap || exit 1
-		"$0" keyring ubuntu-archive-keyring || exit 1
-		debootstrap --keyring $WORKDIR/keyring.gpg $RELEASE "$DIR" || exit 1
-		rm -rf $WORKDIR/keyring.gpg > /dev/null 2>&1
-
-		echo "---- zfsbootmenu-installer: Add Slimbook keyring."
-		"$0" keyring slimbook || exit 1
-		"$0" mkdir-p "$DIR"/etc/apt/trusted.gpg.d || exit 1
-		mv $WORKDIR/keyring.gpg "$DIR"/etc/apt/trusted.gpg.d/slimbook.gpg || exit 1
-		chmod 644 "$DIR"/etc/apt/trusted.gpg.d/slimbook.gpg
-
-		echo "---- zfsbootmenu-installer: Add Mozilla keyring."
-		"$0" mkdir-p "$DIR"/etc/apt/keyrings || exit 1
-		"$0" keyring-asc packages.mozilla.org "$DIR"/etc/apt/keyrings/packages.mozilla.org.asc || exit 1
-		chmod 644 "$DIR"/etc/apt/keyrings/packages.mozilla.org.asc
-
-		exit $?
+		"$0" iso-download-validate-by-hash \
+			"https://cloud.slimbook.net/public.php/dav/files/download/Operating%20systems/Slimbook%20OS/Slimbook%20OS%20${YEAR}/slimbookos-${YEAR}${REV}.iso" \
+			"$HASH" || exit 1
+		exec "$0" iso-extract-from-installer \
+			casper \
+			filesystem.squashfs \
+			filesystem.gnome.squashfs
 		;;
 
-	slimbook-sources)
-		if test X${3+set} '!=' Xset; then
-			echo "$0": Need RELEASE YEAR arguments >&2
-			exit 1
-		fi
-		RELEASE="$2"
-		YEAR="$3"
-		"$0" mkdir-p /etc/apt/sources.list.d || exit 1
-		"$0" mkdir-p /etc/apt/preferences.d || exit 1
-		# Yeah down with snap
-		cat > /etc/apt/sources.list.d/mozilla.sources <<SOURCES
-Types: deb
-URIs: https://packages.mozilla.org/apt/
-Suites: mozilla
-Components: main
-Signed-By: /etc/apt/keyrings/packages.mozilla.org.asc
-SOURCES
-		cat > /etc/apt/preferences.d/mozilla <<SOURCES
-Package: *
-Pin: origin packages.mozilla.org
-Pin-Priority: 1000
-
-Package: firefox*
-Pin: release o=Ubuntu
-Pin-Priority: -1
-SOURCES
-
-		cat > /etc/apt/sources.list.d/slimbook.sources <<SOURCES
-Types: deb
-URIs: https://archive.slimbook.com/$YEAR/
-Suites: slimbookos
-Components: main
-Signed-By: /etc/apt/trusted.gpg.d/slimbook.gpg
-
-Types: deb
-URIs: https://archive.slimbook.com/$YEAR/
-Suites: slimbookos-updates
-Components: main
-Signed-By: /etc/apt/trusted.gpg.d/slimbook.gpg
-
-Types: deb
-URIs: https://archive.slimbook.com/$YEAR/
-Suites: slimbookos-security
-Components: main
-Signed-By: /etc/apt/trusted.gpg.d/slimbook.gpg
-SOURCES
-		"$0" ubuntu-sources-list "$RELEASE"
-		;;
-
-	# Install additional early packages
-	slimbook-install-chroot-addl-early)
-		if test X${2+set} '!=' Xset; then
-			echo "$0": requires YEAR argument >&2
-			exit 1
-		fi
-		YEAR="$2"
-		echo "---- zfsbootmenu-installer: Ubuntu -> SlimbookOS"
-		# In particular this replaces os-release
-		exec apt install -y slimbook-base-files slimbook-default-skel
-		;;
-
-	# Install additional packages
-	# This should come before *-make-user
-	# since they heavily modify /etc/skel
-	slimbook-install-chroot-addl)
-		if test X${2+set} '!=' Xset; then
-			echo "$0": requires YEAR argument >&2
-			exit 1
-		fi
-		YEAR="$2"
-		echo "---- zfsbootmenu-installer: Install SlimbookOS packages."
-		# This overwrites the keys we added, so confirm
-		# yes, we want to overwrite.
-		yes | apt install -y slimbook-keyring
-		if test $? '!=' 0; then
-			exit 1
-		fi
-		case $YEAR in
-		26)
-			apt install -y slimbook-gnome-background-$YEAR || exit 1
-			;;
-
-		esac
-		exec apt install -y \
-			firefox \
-			libslimbook1 mission-center \
-			slimbook-firefox-defaults slimbook-gnome-settings \
-			slimbook-gnome-background slimbook-meta-common \
-			slimbook-meta-gnome slimbook-plymouth-theme \
-			slimbook-service slimbook-ttf-fonts \
-			ubuntu-desktop-minimal ubuntu-minimal
+	slimbook-install-chroot-clean-live)
+		echo "---- zfsbootmenu-installer: SlimbookOS: Mark Live packages for later removal."
+		for KILL_PKG in \
+				calamares-modules-slimbook-calamares3.3 \
+				calamares-settings-slimbook \
+				slimbook-casper-settings \
+				; do
+			apt-mark auto $KILL_PKG > /dev/null 2>&1
+		done
+		exit 0
 		;;
 
 	# Detect the Slimbook device model and install
 	# corresponding packages.
 	slimbook-install-chroot-device-specific)
-		if test X${2+set} '!=' Xset; then
-			echo "$0": requires YEAR argument >&2
-			exit 1
-		fi
-		YEAR="$2"
 		FAMILY="`slimbookctl info | grep '^[ 	]*family:' | sed -e 's@^[ 	]*family:[ 	]*@@'`"
 		echo "---- zfsbootmenu-installer: Slimbook drivers and fixes: family: $FAMILY"
 		case $FAMILY in
 		elemental)
-			exec apt install -y slimbook-meta-essential
+			apt install -y slimbook-meta-essential
 			;;
 
 		titan)
-			exec apt install -y slimbook-meta-hero
+			apt install -y slimbook-meta-hero
 			;;
 
 		creative|evo|excalibur|executive|hero-s|nas|one|prox|zero)
-			exec apt install -y  slimbook-meta-$FAMILY
+			apt install -y  slimbook-meta-$FAMILY
 			;;
 
 		*)
@@ -2264,48 +2176,10 @@ SOURCES
 		exit 0
 		;;
 
-	# Core Slimbook OS installation.
 	slimbook-install-chroot)
-		if test X${3+set} '!=' Xset; then
-			echo "$0": Need RELEASE YEAR arguments >&2
-			exit 1
-		fi
-		RELEASE="$2"
-		YEAR="$3"
-		case $YEAR in
-		26)
-			KERNEL=linux-generic-hwe-$YEAR.04
-			;;
-
-		*)
-			echo "$0": Unrecognized YEAR: $YEAR >&2
-			exit 1
-			;;
-
-		esac
-		"$0" slimbook-sources "$RELEASE" "$YEAR" && \
-		"$0" debian-derivative-prepare && \
-		"$0" slimbook-install-chroot-addl-early "$YEAR" && \
-		apt install -y --no-install-recommends $KERNEL && \
-		"$0" debian-derivative-install-chroot-basics
-		EXIT_CODE=$?
-		if test $EXIT_CODE '!=' 0; then
-			exit $EXIT_CODE
-		fi
-
-		"$0" debian-derivative-install-chroot-more && \
-		"$0" debian-derivative-install-chroot-zfs-support && \
-		"$0" debian-derivative-install-chroot-zfs-config && \
-		"$0" slimbook-install-chroot-addl "$YEAR" && \
-		"$0" debian-derivative-install-chroot-make-user
-		EXIT_CODE=$?
-		if test $EXIT_CODE '!=' 0; then
-			exit $EXIT_CODE
-		fi
-
-		"$0" slimbook-install-chroot-device-specific "$YEAR" && \
-		"$0" typical-enable-auto-login
-		exit $?
+		"$0" slimbook-install-chroot-clean-live || exit 1
+		"$0" iso-debian-derivative-install-chroot-nikkei 'inside' 'initramfs' || exit 1
+		exec "$0" slimbook-install-chroot-device-specific
 		;;
 
 	# ISO-squashfs Installation
