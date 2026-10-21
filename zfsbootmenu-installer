@@ -2217,19 +2217,25 @@ Desktop):
 		echo "---- zfsbootmenu-installer: ISO: Debian derivative: Scheduling removal of packages unneeded for non-GRUB root-on-ZFS."
 		for TO_REMOVE in \
 				btrfs-progs btrfsd btrfsmaintenance \
-				grub-probe grub-common \
-				grub-efi grub-efi-amd64 \
-				grub2-common grub2 grub2-efi \
-				grub2-efi-amd64 os-prober \
-				calamares casper \
+				os-prober calamares casper kernstub \
+				xfsdump xfsprogs \
 				; do
 			apt-mark auto "$TO_REMOVE" > /dev/null 2>&1
+		done
+		apt-mark showmanual | \
+		while read line; do
+			case "$line" in
+			grub-*|grub2-*)
+				apt-mark auto "$line" > /dev/null 2>&1
+				;;
+
+			esac
 		done
 
 		# If there is a filesystem.manifest-remove,
 		# mark them as auto-installed at this point.
 		if test -f /filesystem.manifest-remove; then
-			echo "---- zfsbootmenu-installer: Scheduling filesystem.manifest-remove packages for later removal"
+			echo "---- zfsbootmenu-installer: ISO: Scheduling filesystem.manifest-remove packages for later removal"
 			cat /filesystem.manifest-remove | \
 			while read line; do
 				apt-mark auto "$line" > /dev/null 2>&1
