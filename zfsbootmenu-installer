@@ -2733,6 +2733,182 @@ SCRIPT
 
 	################################################# distro
 
+	################################################# Live Env Package heuristics
+
+	# Given a package manager and a package name,
+	# infer if we should NOT consider the package
+	# as being part of a live environment.
+	# exit 0 if we think it should be kept,
+	# exit 1 if we think it should be removed.
+	guess-live-keep)
+		if test X${3+set} '!=' Xset; then
+			echo "$0": requires PKGR PKGNAME args >&2
+			exit 1
+		fi
+		PKGR="$2"
+		PKGNAME="$3"
+		# Currently only support `apt`
+		if test X"$PKGR" '!=' Xapt; then
+			echo "$0": TODO only support apt now >&2
+			exit 1
+		fi
+		case "$PKGNAME" in
+		deepin-deb-installer)
+			exit 0
+			;;
+
+		diaspora-installer|diaspora-installer-*)
+			exit 0
+			;;
+
+		# Could be part of live env, but can also
+		# be used in prod to change for various
+		# age groups.
+		edubuntu-installer)
+			exit 0
+			;;
+
+		firmware-*-installer)
+			exit 0
+			;;
+
+		google-android-*-installer)
+			exit 0
+			;;
+
+		josm-installer|lxd-installer|opam-installer)
+			exit 0
+			;;
+
+		plasma-runner-installer|pokemmo-installer)
+			exit 0
+			;;
+
+		publicfile-installer)
+			exit 0
+			;;
+
+		python*-installer*)
+			exit 0
+			;;
+
+		qapt-deb-installer)
+			exit 0
+			;;
+
+		steam-installer|ttf-*-installer)
+			exit 0
+			;;
+
+		ubuntustudio-installer)
+			exit 0
+			;;
+
+		#        __ ___ _
+		# I (\/)  / |_ (_
+		# I  \/  /_ |   _)
+		zfs-*|zfsutils*|*-zfs|zfsbootmenu-installer)
+			exit 0
+			;;
+
+		esac
+		exit 1
+		;;
+
+	# Given a package manager and a package name,
+	# infer if we should consider the package
+	# potentially part of a live environment,
+	# unless `guess-live-keep` say it's not.
+	# exit 0 if we think it should be removed,
+	# exit 1 if we think it should be kept.
+	guess-live-remove)
+		if test X${3+set} '!=' Xset; then
+			echo "$0": requires PKGR PKGNAME args >&2
+			exit 1
+		fi
+		PKGR="$2"
+		PKGNAME="$3"
+		# Currently only support `apt`
+		if test X"$PKGR" '!=' Xapt; then
+			echo "$0": TODO only support apt now >&2
+			exit 1
+		fi
+		case "$PKGNAME" in
+		calamares-branding-*|calamares-modules-*|calamares-settings-*)
+			exit 0
+			;;
+
+		*-casper-settings)
+			exit 0
+			;;
+
+		fll-*)
+			exit 0
+			;;
+
+		*-installer|*-installer-*)
+			exit 0
+			;;
+
+		*-live-settings|*-livesettings|*-live-session|*-livesession)
+			exit 0
+			;;
+
+		ubiquity|ubiquity-*)
+			exit 0
+			;;
+
+		# Known distro-specific live envs
+
+		tuxedo-repair*)
+			exit 0
+			;;
+
+		*ubuntu*-live)
+			exit 0
+			;;
+
+		zorin-os*-live|*-zorin-live)
+			exit 0
+			;;
+
+		esac
+		exit 1
+		;;
+
+	# Gets input packages from stdin
+	# and outputs to stdout the package
+	# names of packages we think are
+	# from a live environment and
+	# ought to be removed.
+	# The expected use-case is that
+	# the output of `apt-mark showmanual`
+	# is fed to this.
+	guess-live-filter)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": requires PKGR arg >&2
+			exit 1
+		fi
+		PKGR="$2"
+		while read line; do
+			for PKGNAME in $line; do
+				# Keep is higher priority.
+				# See the "*-installer"
+				# packages we allow because
+				# they're not DISTRO
+				# installers.
+				if "$0" guess-live-keep "$PKGR" "$PKGNAME"; then
+					:
+				elif "$0" guess-live-remove "$PKGR" "$PKGNAME"; then
+					echo $PKGNAME
+				fi
+			done
+		done
+		exit 0
+		;;
+
+	################################################# Live Env Package heuristics
+
 	################################################# OpenZFS Direct Compile
 
 	openzfs-info)
