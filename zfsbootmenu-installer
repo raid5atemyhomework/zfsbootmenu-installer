@@ -167,7 +167,7 @@ DESC
 
 			AssessISO)
 				cat <<DESC
-Analyze a given .iso file and give a prognosis
+Analyze a selected .iso file and give a prognosis
 on whether 'zfsbootmenu-installer' can install
 it successfully.
 
@@ -4606,7 +4606,7 @@ Installation will continue successfully regardless.
 
 	select-iso)
 		if test X${2+set} '!=' Xset; then
-			CURPATH='/'
+			CURPATH="`pwd`"
 		else
 			CURPATH="$2"
 		fi
@@ -5166,6 +5166,26 @@ REPORT
 		done
 		;;
 
+	AssessISO)
+		ISO="`"$0" select-iso`"
+		if test $? '!=' 0; then
+			echo "---- zfsbootmenu-installer: AssessISO: cancelled"
+			exit 0
+		fi
+		echo "---- zfsbootmenu-installer: AssessISO: Extracting and assessing..."
+		"$0" assess-iso "$ISO"
+		if test -f $WORKDIR/iso-report; then
+			"$0" assess-iso-report-human
+			if test -f "$WORKDIR"/iso-report-human; then
+				ISONAME="`echo "$ISO" | grep -o '[^/]*$'`"
+				whiptail --title "$ISONAME" --textbox $WORKDIR/iso-report-human 18 64 2> /dev/null
+			fi
+		fi
+		echo "---- zfsbootmenu-installer: AssessISO: cleaning up..."
+		"$0" clean-up-work
+		exit 0
+		;;
+
         ################################################# Main Menu
 
 	*)
@@ -5196,11 +5216,15 @@ ERR
 	exit 1
 fi
 
+MAINMENU='Exit\nAbout\n'
+
 if "$0" detect-installed; then
-	MAINMENU='Exit\nAbout\nAddBootEnvironment\nChangeDefaultBoot\nReflashESP\nPrepareNewDisk\nChrootIntoBootEnvironment\n'
+	MAINMENU="$MAINMENU"'AddBootEnvironment\nChangeDefaultBoot\nReflashESP\nPrepareNewDisk\nChrootIntoBootEnvironment\n'
 else
-	MAINMENU='Exit\nAbout\nInitialize\n'
+	MAINMENU="$MAINMENU"'Initialize\n'
 fi
+
+MAINMENU="$MAINMENU"'AssessISO\n'
 
 if which fzf > /dev/null 2>&1; then :; else
 	echo "---- zfsbootmenu-installer: Installing needed tools"
@@ -5221,7 +5245,7 @@ export FZF_API_KEY
 SEL=`printf "$MAINMENU" | fzf --layout=reverse-list --no-sort --border --border-label='zfsbootmenu-installer '"$VERSION"' Main Menu'  --preview="$0"' preview-mainmenu {}'`
 
 case $SEL in
-	Initialize|AddBootEnvironment|ChangeDefaultBoot|ReflashESP|PrepareNewDisk|ChrootIntoBootEnvironment)
+	Initialize|AddBootEnvironment|ChangeDefaultBoot|ReflashESP|PrepareNewDisk|ChrootIntoBootEnvironment|AssessISO)
 		;;
 
 	*)
