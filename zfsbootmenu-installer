@@ -165,6 +165,17 @@ mountpoint returned to normal /
 DESC
 				;;
 
+			AssessISO)
+				cat <<DESC
+Analyze a given .iso file and give a prognosis
+on whether 'zfsbootmenu-installer' can install
+it successfully.
+
+Use this before selecting an .iso file to
+install with Initialize or AddBootEnvironment.
+DESC
+				;;
+
 			Exit)
 				cat <<DESC
 Exit this tool.
@@ -281,6 +292,10 @@ DESC
 
 			mkfs.vfat)
 				PACKAGE=dosfstools
+				;;
+
+			modinfo)
+				PACKAGE=kmod
 				;;
 
 			pacstrap)
@@ -2776,7 +2791,11 @@ SCRIPT
 			exit 0
 			;;
 
-		josm-installer|lxd-installer|opam-installer)
+		josm-installer|lxd-installer)
+			exit 0
+			;;
+
+		mintinstall|opam-installer)
 			exit 0
 			;;
 
@@ -3333,6 +3352,16 @@ SCRIPT
 		exit 0
 		;;
 
+	iso-mount)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": require ISO arg >&2
+			exit 1
+		fi
+		ISO="$2"
+		"$0" mkdir-p $WORKDIR/mnt || exit 1
+		exec mount -o loop "$ISO" $WORKDIR/mnt
+		;;
+
 	# Copies out files from
 	# $WORKDIR/installer.iso
 	# First arg is the directory inside the ISO
@@ -3351,11 +3380,10 @@ SCRIPT
 		fi
 		SUBDIR="$2"
 		shift; shift
-		"$0" mkdir-p $WORKDIR/mnt || exit 1
 		"$0" mkdir-p $WORKDIR/prepare || exit 1
 
 		echo "---- zfsbootmenu-installer: Extracting from installer ISO"
-		mount -o loop $WORKDIR/installer.iso $WORKDIR/mnt || exit 1
+		"$0" iso-mount $WORKDIR/installer.iso
 		for FILE in "$@"; do
 			cp $WORKDIR/mnt/"$SUBDIR"/"$FILE" $WORKDIR/prepare/"$FILE"
 			if test '!' -f $WORKDIR/prepare/"$FILE"; then
@@ -4647,6 +4675,352 @@ Installation will continue successfully regardless.
 		;;
 
 	################################################# Browse for ISO
+
+	################################################# Assess ISO
+
+	assess-iso)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": require ISO arg >&2
+			exit 1
+		fi
+		ISO="$2"
+		rm -rf $WORKDIR/assess > /dev/null 2>&1
+		"$0" mkdir-p $WORKDIR/assess/squashfs || exit 1
+
+		REPORT="$WORKDIR"/iso-report
+		rm -rf "$REPORT" > /dev/null 2>&1
+
+		# Try to mount the ISO
+		"$0" iso-mount "$ISO"
+		if test $? '!=' 0; then
+			echo 'isomain='\''unknown'\' >> "$REPORT"
+			exit 0
+		fi
+
+		# Determine main structure of .iso
+		if test -f $WORKDIR/mnt/casper/filesystem.squashfs; then
+			echo 'isomain='\''casper/filesystem.squashfs'\' >> "$REPORT"
+			echo 'isomainbase='\''filesystem.squashfs'\' >> "$REPORT"
+			echo 'tuxedo='\''no'\' >> "$REPORT"
+		elif test -f $WORKDIR/mnt/tuxedo/tuxedo.amd64; then
+			echo 'isomain='\''tuxedo/tuxedo.amd64'\' >> "$REPORT"
+			echo 'isomainbase='\''tuxedo.amd64'\' >> "$REPORT"
+			echo 'tuxedo='\''yes'\' >> "$REPORT"
+		elif test -f $WORKDIR/mnt/live/filesystem.squashfs; then
+			echo 'isomain='\''live/filesystem.squashfs'\' >> "$REPORT"
+			echo 'isomainbase='\''filesystem.squashfs'\' >> "$REPORT"
+			echo 'tuxedo='\''no'\' >> "$REPORT"
+		else
+			echo 'isomain='\''unknown'\' >> "$REPORT"
+			umount -qnR $WORKDIR/mnt
+			exit 0
+		fi
+		# Determine if it is a slimbookos ISO with
+		# filesystem.gnome.squashfs
+		if test -f $WORKDIR/mnt/slimbookos-*.release.txt -a -f $WORKDIR/mnt/casper/filesystem.gnome.squashfs > /dev/null 2>&1; then
+			echo 'isosecond='\''casper/filesystem.gnome.squashfs'\' >> "$REPORT"
+			echo 'isosecondbase='\''filesystem.gnome.squashfs'\' >> "$REPORT"
+			echo 'slimbook='\''yes'\' >> "$REPORT"
+		else
+			echo 'isosecond='\''none'\' >> "$REPORT"
+			echo 'slimbook='\''no'\' >> "$REPORT"
+		fi
+		# Determine if there is a .manifest-remove
+		# file.
+		if test -f $WORKDIR/mnt/casper/filesystem.manifest-remove; then
+			echo 'isoremove='\''casper/filesystem.manifest-remove'\' >> "$REPORT"
+			echo 'isoremovebase='\''filesystem.manifest-remove'\' >> "$REPORT"
+		elif test -f $WORKDIR/mnt/live/filesystem.manifest-remove; then
+			echo 'isoremove='\''live/filesystem.manifest-remove'\' >> "$REPORT"
+			echo 'isoremovebase='\''filesystem.manifest-remove'\' >> "$REPORT"
+		else
+			echo 'isoremove='\''none'\' >> "$REPORT"
+		fi
+
+		. "$REPORT"
+
+		SQUASHFS_OK=yes
+		# Extract the squashfs files.
+		cp $WORKDIR/mnt/$isomain $WORKDIR/assess/squashfs
+		if test $? '!=' 0; then
+			SQUASHFS_OK=no
+		fi
+		if test X"$isosecond" '!=' Xnone; then
+			cp $WORKDIR/mnt/$isosecond $WORKDIR/assess/squashfs
+			if test $? '!=' 0; then
+				SQUASHFS_OK=no
+			fi
+		fi
+		if test $SQUASHFS_OK '!=' yes; then
+			echo 'squashfsok='\''no'\' >> "$REPORT"
+			exit 0
+		fi
+		# Done with the ISO.
+		umount -qnR $WORKDIR/mnt
+
+		# Extract the rootfs from the squashfs.
+		ROOTDIR=$WORKDIR/assess/root
+		"$0" mkdir-p "$ROOTDIR" || exit 1
+		unsquashfs -f -d "$ROOTDIR" $WORKDIR/assess/squashfs/$isomainbase
+		if test $? '!=' 0; then
+			SQUASHFS_OK=no
+		fi
+		if test X"$isosecond" '!=' Xnone; then
+			unsquashfs -f -d "$ROOTDIR" $WORKDIR/assess/squashfs/$isosecondbase
+			if test $? '!=' 0; then
+				SQUASHFS_OK=no
+			fi
+		fi
+		echo 'squashfsok='\'$SQUASHFS_OK\' >> "$REPORT"
+		if test $SQUASHFS_OK '!=' yes; then
+			exit 0
+		fi
+		# Delete the squashfs
+		rm -rf $WORKDIR/assess/squashfs > /dev/null 2>&1
+
+		# Assess the rootfs.
+		"$0" assess-iso-read-os-release || exit 1
+		"$0" assess-iso-find-packager || exit 1
+		"$0" assess-iso-find-init || exit 1
+		"$0" assess-iso-find-zfs || exit 1
+		"$0" assess-iso-find-initrd-maker || exit 1
+		exit 0
+		;;
+
+	assess-iso-read-os-release)
+		REPORT="$WORKDIR"/iso-report
+		ROOTDIR=$WORKDIR/assess/root
+		for FILE in /etc/os-release /usr/lib/os-release; do
+			if test -f "$ROOTDIR"$FILE; then
+				printf 'osreleasename='\' >> $REPORT
+				cat "$ROOTDIR"$FILE | \
+				grep '^[ 	]*NAME=' | \
+				sed -e 's@^[ 	]*NAME=@@' | \
+				sed -e 's@"@@g' | \
+				sed -e "s@'@@g" | \
+				sed -e 's@$@'\''@' >> $REPORT
+
+				printf 'osreleaseversion='\' >> $REPORT
+				cat "$ROOTDIR"$FILE | \
+				grep '^[ 	]*VERSION_ID='  | \
+				sed -e 's@^[ 	]*VERSION_ID=@@' | \
+				sed -e 's@"@@g' | \
+				sed -e "s@'@@g" | \
+				sed -e 's@$@'\''@' >> $REPORT
+				exit 0
+			fi
+		done
+		echo 'osreleasename='\''unknown'\' >> $REPORT
+		echo 'osreleaseversion='\''0'\' >> $REPORT
+		exit 0
+		;;
+
+	assess-iso-find-packager)
+		REPORT=$WORKDIR/iso-report
+		ROOTDIR=$WORKDIR/assess/root
+		if test '(' -d $ROOTDIR/etc/apt/sources.list.d -o \
+				-f $ROOTDIR/etc/apt/sources.list ')' -a \
+			'(' -x $ROOTDIR/bin/apt -o -x $ROOTDIR/usr/bin/apt ')'; then
+			echo 'packager='\''apt'\' >> $REPORT
+			exit 0
+		fi
+
+		# Unknown.
+		echo 'packager='\''unknown'\' >> $REPORT
+		exit 0
+		;;
+
+	assess-iso-find-init)
+		REPORT=$WORKDIR/iso-report
+		ROOTDIR=$WORKDIR/assess/root
+		"$0" ensure readlink
+
+		SBIN_INIT=`readlink -q "$ROOTDIR"/sbin/init`
+		if echo "$SBIN_INIT" | grep 'systemd' > /dev/null 2>&1; then
+			if test '(' -x "$ROOTDIR"/bin/systemctl -o -x "$ROOTDIR"/usr/bin/systemctl ')'; then
+				echo 'init='\''systemd'\' >> "$REPORT"
+				echo 'initmanager='\''systemctl'\' >> "$REPORT"
+				exit 0
+			fi
+		fi
+
+		echo 'init='\''unknown'\' >> "$REPORT"
+		echo 'initmanager='\''unknown'\' >> "$REPORT"
+		exit 0
+		;;
+
+	# Figure out ZFS installation:
+	# 'inside' - builtin to the kernel.
+	# 'dkms' - has `zfs-dkms` package.
+	# 'none' - needs to download OpenZFS.
+	assess-iso-find-zfs)
+		REPORT=$WORKDIR/iso-report
+		ROOTDIR=$WORKDIR/assess/root
+		"$0" ensure modinfo
+
+		# Determine if kernel has it naturally.
+		for KOFILE in \
+				$ROOTDIR/lib/modules/*/kernel/zfs/zfs.ko* \
+				$ROOTDIR/lib/modules/*/ubuntu/dkms/zfs/zfs.ko* \
+				$ROOTDIR/usr/lib/modules/*/kernel/zfs/zfs.ko*; do
+			SIGNER='none'
+			if test -f "$KOFILE"; then
+				SIGNER="`modinfo "$KOFILE" | grep '^signer:' | sed -e 's@^signer:[ 	]*@@' | sed -e 's@[ 	]*$@@'`"
+			fi
+			if test '(' X"$SIGNER" '=' 'XCanonical Ltd. Kernel Module Signing' ')' -o \
+				'(' X"$SIGNER" '=' 'XBuild time autogenerated kernel key' ')'; then
+				echo 'zfs='\''inside'\' >> "$REPORT"
+				exit 0
+			fi
+		done
+
+		# Determine packager.
+		. "$REPORT"
+
+		if test X"$packager" '=' 'Xapt'; then
+			if chroot "$ROOTDIR" /usr/bin/env apt show zfs-dkms > /dev/null 2>&1; then
+				echo 'zfs='\''dkms'\' >> "$REPORT"
+				exit 0
+			fi
+		fi
+
+		echo 'zfs='\''none'\' >> "$REPORT"
+		exit 0
+		;;
+
+	assess-iso-find-initrd-maker)
+		REPORT=$WORKDIR/iso-report
+		ROOTDIR=$WORKDIR/assess/root
+
+		# TODO: Find better way to check.
+		if test -f "$ROOTDIR"/etc/initramfs-tools/initramfs.conf -a \
+				-f "$ROOTDIR"/etc/kernel/postinst.d/initramfs-tools -a \
+				'(' -x "$ROOOTDIR"/sbin/mkinitramfs \
+				-o -x "$ROOTDIR"/usr/sbin/mkinitramfs \
+				-o -x "$ROOOTDIR"/bin/mkinitramfs \
+				-o -x "$ROOTDIR"/usr/bin/mkinitramfs \
+				')'; then
+			echo 'initrdmaker='\''initramfs'\' >> "$REPORT"
+			exit 0
+		elif test -d "$ROOTDIR"/etc/dracut.conf.d -a \
+				-f "$ROOTDIR"/etc/kernel/postinst.d/dracut -a \
+				'(' -x "$ROOTDIR"/sbin/dracut \
+				-o -x "$ROOTDIR"/usr/sbin/dracut \
+				-o -x "$ROOTDIR"/bin/dracut \
+				-o -x "$ROOTDIR"/usr/bin/dracut \
+				')'; then
+			echo 'initrdmaker='\''dracut'\' >> "$REPORT"
+			exit 0
+		fi
+
+		echo 'initrdmaker='\''unknown'\' >> "$REPORT"
+		exit 0
+		;;
+
+	# Convert the $WORKDIR/iso-report to a
+	# human-understandable $WORKDIR/iso-report-human
+	assess-iso-report-human)
+		REPORTHUMAN=$WORKDIR/iso-report-human
+		if test '!' -f $WORKDIR/iso-report; then
+			echo "$0": No $WORKDIR/iso-report >&2
+			exit 1
+		fi
+		rm -rf $REPORTHUMAN > /dev/null 2>&1
+		. $WORKDIR/iso-report
+		if test $isomain '=' unknown; then
+			cat >> "$REPORTHUMAN" <<REPORT
+ISO is not recognized as a Live environment
+Cannot install
+REPORT
+			exit 1
+		elif test $squashfsok '!=' yes; then
+			cat >> "$REPORTHUMAN" <<REPORT
+Extraction of files from Live environment failed
+Cannot install
+REPORT
+			exit 1
+		fi
+
+		# Check packager
+		case "$packager" in
+		apt)
+			;;
+
+		*)
+			cat >> "$REPORTHUMAN" <<REPORT
+Unsupported package manager: $packager
+Cannot install
+REPORT
+			exit 1
+			;;
+
+		esac
+
+		# Check init system
+		case "$init" in
+		systemd)
+			;;
+
+		*)
+			cat >> "$REPORTHUMAN" <<REPORT
+Unsupported init system: $init
+Cannot install
+REPORT
+			exit 1
+			;;
+
+		esac
+
+		# Check initrdmaker
+		case "$initrdmaker" in
+		dracut|initramfs)
+			;;
+
+		*)
+			cat >> "$REPORTHUMAN" <<REPORT
+Unsupported initrd maker: $initrdmaker
+Cannot install
+REPORT
+			exit 1
+			;;
+
+		esac
+
+		echo 'Distro:' "$osreleasename" "$osreleaseversion" >> "$REPORTHUMAN"
+		if test $tuxedo = yes; then
+			echo '(TUXEDO-OS detected)' >> "$REPORTHUMAN"
+		fi
+		if test $slimbook = yes; then
+			echo '(SlimbookOS detected)' >> "$REPORTHUMAN"
+		fi
+		echo >> "$REPORTHUMAN"
+		echo 'packager='$packager 'init='$init 'initrd='$initrdmaker >> "$REPORTHUMAN"
+		echo >> "$REPORTHUMAN"
+
+		case $zfs in
+		inside)
+			echo "Kernel includes ZFS" >> "$REPORTHUMAN"
+			;;
+
+		dkms)
+			echo "Repositories include ZFS as DKMS" >> "$REPORTHUMAN"
+			;;
+
+		none)
+			echo "No ZFS; will build ZFS from source" >> "$REPORTHUMAN"
+			;;
+
+		esac
+
+		cat >> "$REPORTHUMAN" <<REPORT
+
+Likely can be installed.
+REPORT
+
+		exit 0
+		;;
+
+	################################################# Assess ISO
 
         ################################################# Main Menu
 
