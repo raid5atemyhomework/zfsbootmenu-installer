@@ -115,6 +115,11 @@ one supported distro:
 
 DESC
 				"$0" distro list
+				cat <<DESC
+
+This can also install from a Live .iso from many
+Debian-derived or Ubuntu-derived distros.
+DESC
 				;;
 
 			AddBootEnvironment)
@@ -124,6 +129,11 @@ distro:
 
 DESC
 				"$0" distro list
+				cat <<DESC
+
+This can also install from a Live .iso from many
+Debian-derived or Ubuntu-derived distros.
+DESC
 				;;
 
 			ChangeDefaultBoot)
@@ -288,6 +298,10 @@ DESC
 
 			iconv)
 				PACKAGE=libc-bin
+				;;
+
+			isoinfo)
+				PACKAGE=genisoimage
 				;;
 
 			mkfs.vfat)
@@ -937,7 +951,13 @@ README
 		else
 			comment=
 		fi
-		"$0" distro list | fzf --layout=reverse-list --no-sort --border --border-label='Select Distro'"$comment" --preview="$0"' distro preview {}'
+		SEL="`( "$0" distro list ; echo '...FromISO' ) | fzf --layout=reverse-list --no-sort --border --border-label='Select Distro'"$comment" --preview="$0"' distro preview {}'`"
+		if test X"$SEL" '=' X; then
+			exit 1
+		elif test X"$SEL" '=' X...FromISO; then
+			exec "$0" select-iso
+		fi
+		echo "$SEL"
 		exit 0
 		;;
 
@@ -972,6 +992,27 @@ DISTROS
 			exit 1
 		fi
 		DISTRO="$3"
+
+		if test X"$SUBCOMMAND" '=' Xpreview -a X"$DISTRO" '=' X...FromISO; then
+			cat <<FROMISODESC
+Select a distro's Live .iso file in your
+filesystem and install that distro.
+
+This will work for most Debian-derived and
+Ubuntu-derived distros, but not Debian and
+Ubuntu Live .iso files.
+
+Currently, the distro must use SystemD as
+init system, and use a specific but common
+technique to install (copy the Live rootfs,
+uninstall Live packages).
+In a few cases Live packages may remain
+after installation when our heuristics do
+not detect them.
+FROMISODESC
+			exit 0
+		fi
+
 		case "$SUBCOMMAND" in
 			# For install-outside sub-command, $4 is the path.
 			install-outside)
@@ -1741,7 +1782,7 @@ SCRIPT
 			vim bash-completion command-not-found \
 			dkms mokutil signify-openbsd fzf libc-bin \
 			wget util-linux coreutils binutils xz-utils tar \
-			squashfs-tools
+			squashfs-tools genisoimage
 		exit $?
 		;;
 
@@ -2748,6 +2789,92 @@ SCRIPT
 
 	################################################# distro
 
+	################################################# ...FromISO
+
+	install-fromiso-core)
+		# TODO
+		echo "$0" notimplemented >&2
+		exit 1
+		;;
+
+	# Given an .iso file, infer a Boot Environment
+	# name for it.
+	install-fromiso-infer-be)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": require ISO argument >&2
+			exit 1
+		fi
+		ISO="$2"
+		BE="`"$0" install-fromiso-infer-be-core "$ISO"`"
+		if test $? '!=' 0 -o X"$BE" '=' X; then
+			BE=GNULinux
+		fi
+		echo "$BE"
+		exit 0
+		;;
+
+	install-fromiso-infer-be-core)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": require ISO argument >&2
+			exit 1
+		fi
+		ISO="$2"
+		"$0" ensure isoinfo || exit 1
+		isoinfo -d -i "$ISO" | \
+		grep '^Volume id:' | \
+		sed -e 's@^Volume id:[ 	]*@@' | \
+		sed -e 's@[ 	]*$@@' | \
+		sed -e 's@[^-_.A-Za-z0-9]@@g' | \
+		sed -e 's@^[^A-Za-z0-9]@@'
+		exit $?
+		;;
+
+	# Use `whiptail` to ask the user for
+	# the name to use for the boot environment
+	# from an ISO.
+	# Write out the boot env to $WORKDIR/config/be
+	install-fromiso-ask-be)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": require ISO argument >&2
+			exit 1
+		fi
+		ISO="$2"
+
+		INI="`"$0" install-fromiso-infer-be "$ISO"`"
+		exec "$0" install-fromiso-ask-be-loop "$INI"
+		;;
+
+	install-fromiso-ask-be-loop)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": require BE argument >&2
+			exit 1
+		fi
+		BE="$2"
+		"$0" mkdir-p $WORKDIR/config || exit 1
+		rm -rf $WORKDIR/config/be > /dev/null 2>&1
+		whiptail --inputbox 'Give name for Boot Environment' 0 45 "$BE" 2> $WORKDIR/config/be
+		if test $? '!=' 0; then
+			exit 1
+		fi
+		BE="`cat $WORKDIR/config/be`"
+		if grep '^[A-Za-z0-9][-A-Za-z0-9_.]*$' $WORKDIR/config/be > /dev/null 2>&1; then :; else
+			whiptail --msgbox 'Boot Environment name must start with basic Latin letter or digit, and cannot be empty.
+
+Beyond the first character, you can also use . - _
+Spaces are not allowed.' 0 0
+			exec "$0" install-fromiso-ask-be-loop "$BE"
+		fi
+		if zfs list $TANK_NAME/ROOT/"$BE" > /dev/null 2>&1; then
+			whiptail --msgbox 'Boot Environment with that name exists.
+
+Please provide another name.' 0 0
+			exec "$0" install-fromiso-ask-be-loop "$BE"
+		fi
+		exit 0
+		;;
+
+	################################################# ...FromISO
+
 	################################################# Live Env Package heuristics
 
 	# Given a package manager and a package name,
@@ -3656,40 +3783,55 @@ SCRIPT
 		exit 0
 		;;
 
-	# Wrapper function for install-distro-core.
+	# Wrapper function for install-distro-core or
+	# install-fromiso-core.
 	# Cleans up the work directory if there is
 	# a failure and destroys the created dataset.
-	install-distro)
+	install-distro-or-fromiso)
 		if test X${2+set} '!=' Xset; then
 			echo "$0": requires DISTRO argument >&2
 			exit 1
 		fi
 		DISTRO="$2"
-		if "$0" distro check "$DISTRO"; then :; else
-			echo "$0": Unknown DISTRO: $DISTRO >&2
-			exit 1
+		if test -f "$DISTRO"; then
+			"$0" install-fromiso-ask-be "$DISTRO"
+			if test $? '!=' 0; then
+				echo '---- zfsbootmenu-installer: install FromISO: Cancelled'
+				exit 0
+			fi
+			BE="`cat $WORKDIR/config/be`"
+		else
+			if "$0" distro check "$DISTRO"; then :; else
+				echo "$0": Unknown DISTRO: $DISTRO >&2
+				exit 1
+			fi
+			"$0" check-distro-not-installed "$DISTRO" || exit 1
+			BE="$DISTRO"
 		fi
-		"$0" check-distro-not-installed "$DISTRO" || exit 1
 		if test '!' -d $WORKDIR/config; then
 			echo "$0": requires $WORKDIR/config >&2
 			exit 1
 		fi
-		"$0" install-distro-core "$DISTRO" "$TANK_NAME"
+		if test -f "$DISTRO"; then
+			"$0" install-fromiso-core "$DISTRO" "$BE"
+		else
+			"$0" install-distro-core "$DISTRO"
+		fi
 		EXIT_CODE=$?
 		if test $EXIT_CODE '!=' 0; then
 			# Clean up.
 			echo "$0": Install "$DISTRO" failed, destroying. >&2
 			umount -qnR $WORKDIR/mnt
-			if zfs list $TANK_NAME/ROOT/"$DISTRO" > /dev/null 2>&1; then
-				zfs destroy -r $TANK_NAME/ROOT/"$DISTRO" > /dev/null 2>&1
+			if zfs list $TANK_NAME/ROOT/"$BE" > /dev/null 2>&1; then
+				zfs destroy -r $TANK_NAME/ROOT/"$BE" > /dev/null 2>&1
 			fi
 			exit $EXIT_CODE
 		fi
 		umount -qnR $WORKDIR/mnt
-		zfs set mountpoint=/ $TANK_NAME/ROOT/"$DISTRO"
-		zfs set org.zfsbootmenu:active=on $TANK_NAME/ROOT/"$DISTRO"
+		zfs set mountpoint=/ $TANK_NAME/ROOT/"$BE"
+		zfs set org.zfsbootmenu:active=on $TANK_NAME/ROOT/"$BE"
 		sync
-		echo "---- zfsbootmenu-installer: Enabled '$DISTRO' Boot Environment."
+		echo "---- zfsbootmenu-installer: Enabled '$BE' Boot Environment."
 		exit 0
 		;;
 
@@ -3949,7 +4091,12 @@ DANGER
 			exit 1
 		fi
 		"$0" select-distro > $WORKDIR/config/distro
-		if "$0" distro check "`cat $WORKDIR/config/distro`"; then :; else
+		if test -f "`cat $WORKDIR/config/distro`"; then
+			# ISO
+			:
+		elif "$0" distro check "`cat $WORKDIR/config/distro`"; then
+			:
+		else
 			exit 1
 		fi
 
@@ -4112,22 +4259,32 @@ Please try again.' 0 0
 		# Put back $WORKDIR/config
 		mv /work-config $WORKDIR/config || exit 1
 
-		"$0" install-distro-core "$DISTRO" || exit 1
+		# Is it an ISO?
+		if test -f "$DISTRO"; then
+			BE="`"$0" install-fromiso-infer-be "$DISTRO"`"
+			if test $? '!=' 0; then
+				exit $?
+			fi
+			"$0" install-fromiso-core "$DISTRO" "$BE" || exit 1
+		else
+			BE="$DISTRO"
+			"$0" install-distro-core "$DISTRO" || exit 1
+		fi
 		umount -qnR $WORKDIR/mnt
 		umount -qnR $WORKDIR > /dev/null 2>&1
 
 		# Destroy temporary dataset.
 		zfs destroy -rf $TANK_NAME/tmp
 
-		zfs set mountpoint=/ $TANK_NAME/ROOT/"$DISTRO"
-		zfs set org.zfsbootmenu:active=on $TANK_NAME/ROOT/"$DISTRO"
-		zpool set bootfs=$TANK_NAME/ROOT/"$DISTRO" $TANK_NAME
+		zfs set mountpoint=/ $TANK_NAME/ROOT/"$BE"
+		zfs set org.zfsbootmenu:active=on $TANK_NAME/ROOT/"$BE"
+		zpool set bootfs=$TANK_NAME/ROOT/"$BE" $TANK_NAME
 		sync
 		zpool export $TANK_NAME
 		sync
 		sleep 1
 		udevadm trigger
-		echo "---- zfsbootmenu-installer: Installed '$DISTRO' into $TANK_NAME"
+		echo "---- zfsbootmenu-installer: Installed '$BE' into $TANK_NAME"
 		cat <<MSG
 
 Congratulations, installation has completed!
@@ -5063,18 +5220,21 @@ REPORT
 
 	AddBootEnvironment)
 		DISTRO=`"$0" select-distro "Add Boot Environment"`
-		if "$0" distro check "$DISTRO"; then :; else
+		if test -f "$DISTRO"; then
+			:
+		elif "$0" distro check "$DISTRO"; then
+			"$0" check-distro-not-installed "$DISTRO" || exit 1
+		else
 			echo "---- zfsbootmenu-installer: AddBootEnvironment: cancelled"
 			exit 0
 		fi
-		"$0" check-distro-not-installed "$DISTRO" || exit 1
 		echo "---- zfsbootmenu-installer: AddBootEnvironment: $DISTRO"
 		"$0" prepare-work-from-existing
 		if test $? '!=' 0; then
 			"$0" clean-up-work
 			exit 1
 		fi
-		"$0" install-distro $DISTRO
+		"$0" install-distro-or-fromiso "$DISTRO"
 		EXIT_CODE=$?
 		"$0" clean-up-work
 		exit $EXIT_CODE
@@ -5247,10 +5407,12 @@ MAINMENU="$MAINMENU"'AssessISO\n'
 
 if which fzf > /dev/null 2>&1; then :; else
 	echo "---- zfsbootmenu-installer: Installing needed tools"
-	if "$0" ensure fzf && "$0" ensure whiptail && "$0" ensure wget && "$0" ensure cracklib-check; then :; else
-		echo "$0": Unable to ensure needed tools >&2
-		exit 1
-	fi
+	for TOOL in fzf whiptail wget cracklib-check isoinfo; do
+		if "$0" ensure "$TOOL"; then :; else
+			echo "$0": Unable to ensure needed tools >&2
+			exit 1
+		fi
+	done
 fi
 FZF_DEFAULT_COMMAND=
 FZF_DEFAULT_OPTS=
