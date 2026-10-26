@@ -2791,10 +2791,228 @@ SCRIPT
 
 	################################################# ...FromISO
 
+	# Extract the squashfs files from the ISO.
+	install-fromiso-extract-from-iso)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": require ISO arg >&2
+			exit 1
+		fi
+		ISO="$2"
+		rm -rf $WORKDIR/assess > /dev/null 2>&1
+		rm -rf $WORKDIR/iso-report > /dev/null 2>&1
+		rm -rf $WORKDIR/prepare
+		"$0" mkdir-p $WORKDIR/prepare || exit 1
+
+		"$0" assess-iso-main-structure "$ISO" || exit 1
+
+		. $WORKDIR/iso-report
+
+		if test X"$isomain" '=' Xunknown; then
+			echo "$0": ISO layout not recognized >&2
+			exit 1
+		fi
+
+		cp $WORKDIR/mnt/"$isomain" $WORKDIR/prepare/"$isomainbase" || exit 1
+		if test X"$isosecond" '!=' Xnone; then
+			cp $WORKDIR/mnt/"$isosecond" $WORKDIR/prepare/"$isosecondbase" || exit 1
+		fi
+		if test X"$isoremove" '!=' Xnone; then
+			cp $WORKDIR/mnt/"$isoremove" $WORKDIR/prepare/"$isoremovebase" || exit 1
+		fi
+		umount -qnR $WORKDIR/mnt > /dev/null 2>&1
+
+		exit 0
+		;;
+
+	# Expand the squashfs files indicated in the
+	# iso-report to the $WORKDIR/mnt
+	install-fromiso-unsquash)
+		if test '!' -d $WORKDIR/mnt; then
+			echo "$0": No $WORKDIR/mnt directory >&2
+			exit 1
+		fi
+
+		. $WORKDIR/iso-report
+
+		unsquashfs -f -d $WORKDIR/mnt $WORKDIR/prepare/"$isomainbase" || exit 1
+		if test X"$isosecond" '!=' Xnone; then
+			unsquashfs -f -d $WORKDIR/mnt $WORKDIR/prepare/"$isosecondbase" || exit 1
+		fi
+		if test X"$isoremove" '!=' Xnone; then
+			cp $WORKDIR/prepare/"$isoremovebase" $WORKDIR/mnt/filesystem.manifest-remove || exit 1
+		fi
+
+		"$0" assess-iso-read-rootfs $WORKDIR/mnt || exit 1
+		"$0" install-fromiso-check-iso-report || exit 1
+		cp $WORKDIR/iso-report $WORKDIR/mnt/iso-report || exit 1
+
+		exit 0
+		;;
+
+	# Check the $WORKDIR/iso-report if we
+	# support the squashfs from the ISO
+	# file.
+	install-fromiso-check-iso-report)
+		. $WORKDIR/iso-report
+
+		case "$packager" in
+		apt)
+			;;
+
+		*)
+			echo "$0": Unsupported packager: $packager >&2
+			exit 1
+			;;
+
+		esac
+		case "$init" in
+		systemd)
+			;;
+
+		*)
+			echo "$0": Unsupported init system: $init >&2
+			exit 1
+			;;
+
+		esac
+		case "$initrdmaker" in
+		initramfs|dracut)
+			;;
+
+		*)
+			echo "$0": Unsupported initrd maker: $initrdmaker >&2
+			exit 1
+			;;
+
+		esac
+		exit 0
+		;;
+
+	# Prepares live packages for uninstallation,
+	# reading the list from stdin.
+	install-fromiso-uninstall-stdin)
+		if test X"${2+set}" '!=' Xset; then
+			echo "$0": requires PKGR argument >&2
+			exit 1
+		fi
+		PKGR="$2"
+		case "$PKGR" in
+		apt)
+			while read line; do
+				echo Marking for removal: $line
+				apt-mark auto $line || exit 1
+			done
+			;;
+
+		esac
+		exit 0
+		;;
+
+	# performs ISO install within the
+	# rootfs chroot.
+	# /iso-report must exist
+	install-fromiso-chroot)
+		if test '!' -f /iso-report; then
+			echo "$0": No /iso-report file >&2
+			exit 1
+		fi
+		. /iso-report
+		rm -rf /iso-report > /dev/null 2>&1
+
+		case "$packager" in
+		apt)
+			LISTINSTALLED="apt-mark showmanual"
+			NIKKEI="iso-debian-derivative-install-chroot-nikkei"
+			;;
+
+		esac
+
+		echo "---- zfsbootmenu-installer: FromISO: Marking live packages for uninstallation later..."
+		$LISTINSTALLED | \
+		"$0" guess-live-filter $packager | \
+		"$0" install-fromiso-uninstall-stdin $packager
+		if test $? '!=' 0; then
+			echo "$0": Unmarking failed.
+			exit 1
+		fi
+
+		# Handle TUXEDO-specific pre-install tasks.
+		if test X"$tuxedo" '=' Xyes; then
+			echo "---- zfsbootmenu-installer: FromISO: TUXEDO-specific pre-install tasks."
+			apt modernize-sources
+			"$0" tuxedo-install-chroot-clean-live || exit 1
+		fi
+
+		# TODO: pass in the `init` system.
+		"$0" "$NIKKEI" "$zfs" "$initrdmaker" || exit 1
+
+		# Handle TUXEDO-specific post-install tasks.
+		if test X"$tuxedo" '=' Xyes; then
+			echo "---- zfsbootmenu-installer: FromISO: TUXEDO-specific post-install tasks."
+			"$0" tuxedo-install-chroot-final-fixup || exit 1
+			"$0" tuxedo-enable-auto-login || exit 1
+		fi
+
+		# Handle SlimbookOS-specific post-install tasks
+		if test X"$slimbook" '=' Xyes; then
+			echo "---- zfsbootmenu-installer: FromISO: SlimbookOS-specific post-install tasks"
+			"$0" slimbook-install-chroot-device-specific || exit 1
+		fi
+
+		exit 0
+		;;
+
+	# Install the given $ISO into a new
+	# $TANK_NAME/ROOT/$BE dataset,
+	# taking files from $WORKDIR/config.
+	# Does not clean up workdir or unmount
+	# or change mountpoint of new dataset
+	# if installation fails.
+	# TODO: unify with install-distro-core
 	install-fromiso-core)
-		# TODO
-		echo "$0" notimplemented >&2
-		exit 1
+		if test X${3+set} '!=' Xset; then
+			echo "$0": requires ISO BE argument >&2
+			exit 1
+		fi
+		ISO="$2"
+		BE="$3"
+		if test '!' -f "$ISO"; then
+			echo "$0": Not found: "$ISO" >&2
+			exit 1
+		fi
+		"$0" check-distro-not-installed "$BE" || exit 1
+
+		echo "---- zfsbootmenu-installer: FromISO: Preparing to install '$ISO' -> '$BE'."
+		"$0" install-fromiso-extract-from-iso "$ISO" || exit 1
+
+		echo "---- zfsbootmenu-installer: FromISO: Initial install."
+		zfs create -o mountpoint=$WORKDIR/mnt -o canmount=noauto \
+			$TANK_NAME/ROOT/"$BE" || exit 1
+		zfs mount $TANK_NAME/ROOT/"$BE" || exit 1
+		"$0" install-fromiso-unsquash || exit 1
+
+		"$0" copy-config-to-new-distro || exit 1
+		"$0" mount-magic-to-new-distro || exit 1
+
+		echo "---- zfsbootmenu-installer: FromISO: Chroot install."
+		chroot $WORKDIR/mnt \
+			/usr/local/bin/zfsbootmenu-installer \
+				install-fromiso-chroot || exit 1
+
+		# Final signing and log compression.
+		chroot $WORKDIR/mnt \
+			/usr/local/bin/zfsbootmenu-installer \
+				sign-all-kernels || exit 1
+		echo "---- zfsbootmenu-installer: FromISO: Disable log compression if possible (best effort)"
+		chroot $WORKDIR/mnt \
+			/usr/local/bin/zfsbootmenu-installer \
+				typical-no-compress-logs || exit 1
+
+		# Restore /etc/resolv.conf if there
+		# was a backup.
+		mv $WORKDIR/mnt/etc/resolv.conf.bak $WORKDIR/mnt/etc/resolv.conf > /dev/null 2>&1
+
+		exit 0
 		;;
 
 	# Given an .iso file, infer a Boot Environment
@@ -4852,7 +5070,7 @@ Installation will continue successfully regardless.
 		. "$REPORT"
 
 		# Did it even have a structure we recognized?
-		if test X"$isomain" '=' Xnone; then
+		if test X"$isomain" '=' Xunknown; then
 			# No, back out.
 			exit 0
 		fi
