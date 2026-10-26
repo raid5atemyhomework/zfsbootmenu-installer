@@ -1948,6 +1948,9 @@ SCRIPT
 		if test -d /etc/lightdm; then
 			"$0" typical-lightdm-enable-auto-login /etc/lightdm "$USERNAME"
 		fi
+		if test -f /etc/greetd/cosmic-greeter.toml && which start-cosmic > /dev/null 2>&1; then
+			"$0" typical-greetd-enable-auto-login /etc/greetd/cosmic-greeter.toml "$USERNAME" start-cosmic
+		fi
 		# TODO SLiM
 		exit 0
 		;;
@@ -2021,6 +2024,27 @@ CONF
 autologin-user=$USERNAME
 autologin-user-timeout=0
 CONF
+		exit 0
+		;;
+
+	# Enable autologin for a greetd display manager
+	typical-greetd-enable-auto-login)
+		if test X"${4+set}" '!=' Xset; then
+			echo "$0": require TOML USERNAME CMD args >&2
+			exit 1
+		fi
+		TOML="$2"
+		USERNAME="$3"
+		CMD="$4"
+		# TODO: Erase any existing [initial_session]
+		# section.
+		# Probably requires some serious sed hacking.
+		cat >> "$TOML" <<TOML
+
+[initial_session]
+command = "$CMD"
+user = "$USERNAME"
+TOML
 		exit 0
 		;;
 
@@ -2384,22 +2408,6 @@ Desktop):
 			filesystem.manifest-remove
 		;;
 
-	pop-cosmic-enable-auto-login)
-		USERNAME="`cat /usr/local/username`"
-		if test -f /etc/greetd/cosmic-greeter.toml; then
-			cat >> /etc/greetd/cosmic-greeter.toml <<TOML
-
-[initial_session]
-command = "start-cosmic"
-user = "$USERNAME"
-TOML
-			exit 0
-		else
-			# Fall back to normal auto-login
-			exec "$0" typical-enable-auto-login
-		fi
-		;;
-
 	pop-install-chroot)
 		echo "---- zfsbootmenu-installer: Removing installer and bootloader..."
 		# kernelstub is prone to saying something like
@@ -2413,7 +2421,7 @@ TOML
 			apt-mark auto $KILL_PKG > /dev/null 2>&1
 		done
 		"$0" iso-debian-derivative-install-chroot-nikkei 'dkms' 'initramfs' || exit 1
-		exec "$0" pop-cosmic-enable-auto-login
+		exit 0
 		;;
 
 	# TUXEDO OS
