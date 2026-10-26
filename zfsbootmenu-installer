@@ -4897,11 +4897,7 @@ Installation will continue successfully regardless.
 		rm -rf $WORKDIR/assess/squashfs > /dev/null 2>&1
 
 		# Assess the rootfs.
-		"$0" assess-iso-read-os-release || exit 1
-		"$0" assess-iso-find-packager || exit 1
-		"$0" assess-iso-find-init || exit 1
-		"$0" assess-iso-find-zfs || exit 1
-		"$0" assess-iso-find-initrd-maker || exit 1
+		exec "$0" assess-iso-read-rootfs "$ROOTDIR"
 		exit 0
 		;;
 
@@ -4964,8 +4960,12 @@ Installation will continue successfully regardless.
 		;;
 
 	assess-iso-read-os-release)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": require ROOTDIR arg >&2
+			exit 1
+		fi
+		ROOTDIR="$2"
 		REPORT="$WORKDIR"/iso-report
-		ROOTDIR=$WORKDIR/assess/root
 		for FILE in /etc/os-release /usr/lib/os-release; do
 			if test -f "$ROOTDIR"$FILE; then
 				printf 'osreleasename='\' >> $REPORT
@@ -4992,8 +4992,12 @@ Installation will continue successfully regardless.
 		;;
 
 	assess-iso-find-packager)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": require ROOTDIR arg >&2
+			exit 1
+		fi
+		ROOTDIR="$2"
 		REPORT=$WORKDIR/iso-report
-		ROOTDIR=$WORKDIR/assess/root
 		if test '(' -d $ROOTDIR/etc/apt/sources.list.d -o \
 				-f $ROOTDIR/etc/apt/sources.list ')' -a \
 			'(' -x $ROOTDIR/bin/apt -o -x $ROOTDIR/usr/bin/apt ')'; then
@@ -5007,8 +5011,12 @@ Installation will continue successfully regardless.
 		;;
 
 	assess-iso-find-init)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": require ROOTDIR arg >&2
+			exit 1
+		fi
+		ROOTDIR="$2"
 		REPORT=$WORKDIR/iso-report
-		ROOTDIR=$WORKDIR/assess/root
 		"$0" ensure readlink
 
 		SBIN_INIT=`readlink -q "$ROOTDIR"/sbin/init`
@@ -5030,8 +5038,12 @@ Installation will continue successfully regardless.
 	# 'dkms' - has `zfs-dkms` package.
 	# 'none' - needs to download OpenZFS.
 	assess-iso-find-zfs)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": require ROOTDIR arg >&2
+			exit 1
+		fi
+		ROOTDIR="$2"
 		REPORT=$WORKDIR/iso-report
-		ROOTDIR=$WORKDIR/assess/root
 		"$0" ensure modinfo
 
 		# Determine if kernel has it naturally.
@@ -5065,8 +5077,12 @@ Installation will continue successfully regardless.
 		;;
 
 	assess-iso-find-initrd-maker)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": require ROOTDIR arg >&2
+			exit 1
+		fi
+		ROOTDIR="$2"
 		REPORT=$WORKDIR/iso-report
-		ROOTDIR=$WORKDIR/assess/root
 
 		# TODO: Find better way to check.
 		if test -f "$ROOTDIR"/etc/initramfs-tools/initramfs.conf -a \
@@ -5090,6 +5106,20 @@ Installation will continue successfully regardless.
 		fi
 
 		echo 'initrdmaker='\''unknown'\' >> "$REPORT"
+		exit 0
+		;;
+
+	assess-iso-read-rootfs)
+		if test X${2+set} '!=' Xset; then
+			echo "$0": require ROOTDIR arg >&2
+			exit 1
+		fi
+		ROOTDIR="$2"
+		"$0" assess-iso-read-os-release "$ROOTDIR" || exit 1
+		"$0" assess-iso-find-packager "$ROOTDIR" || exit 1
+		"$0" assess-iso-find-init "$ROOTDIR" || exit 1
+		"$0" assess-iso-find-zfs "$ROOTDIR" || exit 1
+		"$0" assess-iso-find-initrd-maker "$ROOTDIR" || exit 1
 		exit 0
 		;;
 
