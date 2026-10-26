@@ -2295,10 +2295,14 @@ Desktop):
 		# TUXEDO-OS case above don't keep them
 		# installed.
 		echo "---- zfsbootmenu-installer: ISO: Debian derivative: Scheduling removal of packages unneeded for non-GRUB root-on-ZFS."
+		# kernelstub is a Pop!_OS-only package, which
+		# contains a simple kernel stub EFI bootloader
+		# script.
+		# Kill it here because ZFSBootMenu > kernelstub
 		for TO_REMOVE in \
 				btrfs-progs btrfsd btrfsmaintenance \
 				os-prober calamares casper kernstub \
-				xfsdump xfsprogs \
+				xfsdump xfsprogs kernelstub \
 				; do
 			apt-mark auto "$TO_REMOVE" > /dev/null 2>&1
 		done
@@ -2410,14 +2414,8 @@ Desktop):
 
 	pop-install-chroot)
 		echo "---- zfsbootmenu-installer: Removing installer and bootloader..."
-		# kernelstub is prone to saying something like
-		# "you are in a live environment, run `sudo kernelstub`
-		# or your computer will self-destruct".
-		# Unfortunately kernelstub is a dinky little
-		# non-ZFS-capable bootloader, so make kernelstub
-		# self-destruct instead.
 		for KILL_PKG in pop-installer pop-installer-casper \
-				pop-installer-session kernelstub; do
+				pop-installer-session; do
 			apt-mark auto $KILL_PKG > /dev/null 2>&1
 		done
 		"$0" iso-debian-derivative-install-chroot-nikkei 'dkms' 'initramfs' || exit 1
