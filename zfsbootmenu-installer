@@ -2472,6 +2472,14 @@ Desktop):
 		systemctl disable casper-md5check.service > /dev/null 2>&1
 		systemctl disable casper.service > /dev/null 2>&1
 
+		# Delete uid 1000 if it exists.
+		UID1000="`id -n -u 1000`"
+		if test $? '=' 0; then
+			echo "---- zfsbootmenu-installer: ISO: Remove user $UID1000"
+			userdel "$UID1000" > /dev/null 2>&1
+			rm -rf /home/"$UID1000" > /dev/null 2>&1
+		fi
+
 		"$0" debian-derivative-prepare || exit 1
 		apt install -y --no-install-recommends dkms || exit 1
 		"$0" dkms-sign-all-modules || exit 1
