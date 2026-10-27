@@ -11,6 +11,12 @@
   * Pop!\_OS
   * TUXEDO-OS
   * PureOS
+  * elementaryOS
+  * In addition, it can now read the Live .iso files of many
+    Debian- and Ubuntu-derived distros and install them as well.
+    The following have been tested with their Live .iso files:
+    - Zorin OS
+    - Linux Mint
 
 `zfsbootmenu-installer` is a shell script for installing Root-on-ZFS
 setups for a small handful of GNU/Linux distributions.
