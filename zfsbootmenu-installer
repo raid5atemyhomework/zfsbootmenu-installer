@@ -2028,21 +2028,18 @@ SCRIPT
 		fi
 		while read line; do
 			for PKG in $line; do
-				cat /.showmanual | \
-				while read mline; do
-					for MPKG in $mline; do
-						if test X"$PKG" '=' X"$MPKG"; then
-							echo "$CANDIDATE needed by $MPKG"
-							# Found matching
-							# package, not a
-							# candidate for
-							# removal
-							exit 0
-						fi
-					done
-				done
+				MPKG="`grep '^'"$PKG"'$' /.showmanual`"
+				if test X"$PKG" '=' X"$MPKG"; then
+					echo "$CANDIDATE needed by $MPKG"
+					# Found matching
+					# package, not a
+					# candidate for
+					# removal
+					exit 0
+				fi
 			done
 		done
+		echo Eliminate: $CANDIDATE
 		echo "$CANDIDATE" >> /.toeliminate
 		exit 0
 		;;
@@ -2445,7 +2442,7 @@ Desktop):
 				btrfs-progs btrfsd btrfsmaintenance \
 				os-prober calamares casper kernelstub \
 				xfsdump xfsprogs kernelstub shim shim-signed \
-				nullboot \
+				nullboot memtest86+ \
 				; do
 			apt-mark auto "$TO_REMOVE" > /dev/null 2>&1
 		done
