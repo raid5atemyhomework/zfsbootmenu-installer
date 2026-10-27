@@ -1635,11 +1635,11 @@ SCRIPT
 		echo "---- zfsbootmenu-installer: debian derivative: setup kernel autosign"
 		"$0" mkdir-p /etc/kernel/postinst.d || exit 1
 		"$0" print-sign-kernel-script > /etc/kernel/postinst.d/00-0-sign-with-mok
-		if test '!' -f /etc/kernel/postinst.d/00-0-sign-with-mok; then
+		chmod 755 /etc/kernel/postinst.d/00-0-sign-with-mok
+		if test '!' -x /etc/kernel/postinst.d/00-0-sign-with-mok; then
 			echo "$0": Unable to create automated kernel signing >&2
 			exit 1
 		fi
-		chmod 755 /etc/kernel/postinst.d/00-0-sign-kernel
 		exit 0
 		;;
 
