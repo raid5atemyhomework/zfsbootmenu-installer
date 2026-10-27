@@ -1905,6 +1905,148 @@ SCRIPT
 		exec "$0" debian-derivative-install-chroot-make-user-password-only
 		;;
 
+	# Grub elimination (debian derivative)
+
+	# Eliminate grub and other lesser bootloaders.
+	#
+	# Our problems are:
+	#
+	# - If `grub-common` remains installed, it will
+	#   keep triggering `grub-probe`, which searches
+	#   for `vmlinuz` files... including in our
+	#   snapshots, which makes it take a LONG time,
+	#   for something that is not actually useful
+	#   in our Grub-free environment.
+	# - If we explicitly `apt remove --allow-remove-essential grub-common`
+	#   then some distros, such as TUXEDO and Zorin
+	#   OS, will fail to install correctly, because
+	#   they have packages that strongly `Depends:`
+	#   on `grub-common`.
+	# - We can mark `grub-common` and friends as
+	#   `apt-mark auto`, but they won't be
+	#   `apt autremove`d because they are "essential"
+	#   system packages.
+	#   The only way to remove them is by explicit
+	#   `apt remove --allow-remove-essential`, but
+	#   see above.
+	#   (`apt autoremove` ignores `--allow-remove-essential`)
+	#
+	# Thus, we need to do tracking of `apt-mark showmanual`
+	# and `apt-cache rdepends` ourselves.
+	debian-derivative-eliminate-grub)
+		# Prepare the list of manually-installed
+		# packages.
+		rm -rf /.showmanual > /dev/null 2>&1
+		apt-mark showmanual > /.showmanual
+
+		# Perform our processing.
+		"$0" debian-derivative-eliminate-grub-core
+		EXIT_CODE=$?
+		# Remove our temporary file.
+		rm -rf /.showmanual > /dev/null 2>&1
+		exit $EXIT_CODE
+		;;
+
+	debian-derivative-eliminate-grub-core)
+		echo "---- zfsbootmenu-installer: debian derivative: Eliminating lesser bootloaders: finding safely removable packages"
+		rm -rf /.toeliminate > /dev/null 2>&1
+		printf '' > /.toeliminate
+
+		# We list both grub-efi-amd64 and
+		# grub-pc because by default, if you
+		# remove one, it'll install the other.
+		# You need to explicitly tell it to
+		# remove both.
+		for CANDIDATE in \
+			kernelstub \
+			grub-common grub2-common \
+			shim shim-signed \
+			os-prober \
+			grub-efi-amd64 grub-efi \
+			grub-efi-amd64-unsigned \
+			grub-efi-amd64-dbg \
+			grub-pc grub-pc-dbg \
+			grub-efi-ia32 \
+			grub-efi-ia32-unsigned \
+			grub-efi-ia32-dbg \
+			nullboot \
+			; do
+			# Is it even in the repos?
+			if apt show $CANDIDATE > /dev/null 2>&1; then
+				# We do NOT check if the $CANDIDATE
+				# is installed!
+				# As mentioned above, by default, if
+				# you uninstall grub-efi-amd64 then
+				# the system will install grub-pc.
+				# It's important to explicitly
+				# specify EVERY candidate listed above
+				# so apt knows not to install
+				# replacements.
+
+				# The apt-cache command below will
+				# search for reverse dependencies
+				# (i.e. packages that need the
+				# $CANDIDATE) and print them out.
+				# We feed it into the helper
+				# -find-manual function, which takes
+				# stdin and looks for packages in
+				# /.showmanual to see if there are
+				# matches.
+				# If there are none, the helper
+				# then adds it to the
+				# /.toeliminate
+				apt-cache rdepends \
+					--recurse --installed \
+					--no-recommends --no-suggests \
+					$CANDIDATE | \
+				grep '^[^ ]' | \
+				grep -iv 'reverse depends' | \
+				$0 debian-derivative-eliminate-grub-find-manual "$CANDIDATE"
+			fi
+		done
+		TOELIM="`cat /.toeliminate`"
+		if test X"$TOELIM" '!=' X; then
+			echo "---- zfsbootmenu-installer: debian derivative: Eliminating lesser bootloaders: removing" $TOELIM
+			yes | apt remove -y --allow-remove-essential $TOELIM
+			EXIT_CODE=$?
+		else
+			EXIT_CODE=0
+		fi
+		rm -rf /.toeliminate /.showmanual > /dev/null 2>&1
+		exit $EXIT_CODE
+		;;
+
+	debian-derivative-eliminate-grub-find-manual)
+		if test X"${2+set}" '!=' Xset; then
+			echo "$0": require CANDIDATE arg >&2
+			exit 1
+		fi
+		CANDIDATE="$2"
+		if test '!' -f /.showmanual; then
+			echo "$0": No /.showmanual file >&2
+			exit 1
+		fi
+		while read line; do
+			for PKG in $line; do
+				cat /.showmanual | \
+				while read mline; do
+					for MPKG in $mline; do
+						if test X"$PKG" '=' X"$MPKG"; then
+							echo "$CANDIDATE needed by $MPKG"
+							# Found matching
+							# package, not a
+							# candidate for
+							# removal
+							exit 0
+						fi
+					done
+				done
+			done
+		done
+		echo "$CANDIDATE" >> /.toeliminate
+		exit 0
+		;;
+
 	# Typical GNU/Linux systems
 
 	typical-no-compress-logs)
@@ -2301,8 +2443,9 @@ Desktop):
 		# Kill it here because ZFSBootMenu > kernelstub
 		for TO_REMOVE in \
 				btrfs-progs btrfsd btrfsmaintenance \
-				os-prober calamares casper kernstub \
-				xfsdump xfsprogs kernelstub \
+				os-prober calamares casper kernelstub \
+				xfsdump xfsprogs kernelstub shim shim-signed \
+				nullboot \
 				; do
 			apt-mark auto "$TO_REMOVE" > /dev/null 2>&1
 		done
@@ -2361,8 +2504,9 @@ Desktop):
 
 	iso-debian-derivative-install-chroot-final-cleanup)
 		echo "---- zfsbootmenu-installer: ISO: debian derivative: clean up unneeded packages"
+		"$0" debian-derivative-eliminate-grub
 		yes | apt autoremove
-		yes | apt autoclean
+		yes | apt clean
 		exit 0
 		;;
 
@@ -2382,9 +2526,6 @@ Desktop):
 		"$0" debian-derivative-install-chroot-zfs-i-choose-you "$SELECTOR" "$INITRD_MAKER" || exit 1
 		#
 		"$0" iso-debian-derivative-install-chroot-post-zfs-dkms || exit 1
-		# TODO: Consider scanning for manually-installed
-		# packages matching... -livesettings, -live-settings,
-		# live-, live-settings-, livesettings-....
 		"$0" iso-debian-derivative-install-chroot-final-cleanup || exit 1
 		"$0" typical-enable-auto-login || exit 1
 		exit 0
