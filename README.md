@@ -495,3 +495,10 @@ known-working Boot Environments and then use
 `zfsbootmenu-installer`'s
 `ChrootIntoBootEnvironment` to get a shell
 into that Boot Environment.
+
+AI Disclosure
+-------------
+
+All code and documentation for this tool is 100%
+beercoded humanslop, typed in with hands crafted
+from ethically-sourced human flesh.

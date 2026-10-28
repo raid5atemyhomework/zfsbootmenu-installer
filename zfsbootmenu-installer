@@ -92,9 +92,16 @@ zfsbootmenu-installer <command> <args>....
 
 Send bug reports to raid5atemyhomework@protonmail.com
 This tool is released under an MIT license.
+
+----- AI DISCLOSURE -----
+
+All code and documentation for this tool is 100%
+beercoded humanslop, typed in with hands crafted of
+ethically-sourced human flesh.
 HELP
 		exit 0
 		;;
+
 	--version|-v)
 		cat <<VERSION
 zfsbootmenu-installer ${VERSION}
