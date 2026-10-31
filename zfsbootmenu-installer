@@ -38,7 +38,7 @@
 
 #
 
-VERSION=1.1.0
+VERSION=1.1.1
 
 # Convenient names.
 # These are NOT intended to be modifiable.
