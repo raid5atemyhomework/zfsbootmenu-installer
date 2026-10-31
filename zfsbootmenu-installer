@@ -1155,6 +1155,77 @@ PUB
 
 	################################################# shim-signed Download
 
+	################################################# Passphrase Prompt
+
+	print-passphrase-prompt)
+		gpg --dearmour <<ARMOR
+-----BEGIN PGP ARMORED FILE-----
+Comment: Use "gpg --dearmor" for unpacking
+
+IyEgL2Jpbi9iYXNoCgojIyBUaGlzIGxvYWQta2V5IGhvb2sgcHJvdmlkZXMgYSBu
+aWNlciBwYXNzcGhyYXNlIHByb21wdAojIyB0byB0aGUgdXNlciwgc2hvd2luZyB0
+aGUgbnVtYmVyIG9mIGNoYXJhY3RlcnMgdHlwZWQgaW4KIyMgYXMgJyonLgojIwoj
+IyBXZSB1c2UgdGhpcyBpbnN0ZWFkIG9mIGB3aGlwdGFpbGAgb3IgYGRpYWxvZ2Ag
+c28gd2UKIyMgY2FuIGFjdHVhbGx5IGp1c3QgaW5jbHVkZSB0aGlzIGhvb2sgdXNp
+bmcgdGhlCiMjIHpibS5ob29rcm9vdCBjb21tYW5kbGluZSBvbiBhIHN0YW5kYXJk
+IEVGSSBkb3dubG9hZC4KIyMgcHJpbnRmLCBzdHR5LCB0ZXN0LCBhbmQgaGVhZCBh
+cmUgYWxsIGluIGNvcmV1dGlscy4KIyMKIyMgVG8gdXNlLCBmaW5kIHRoZSBtb3Vu
+dGFibGUgcmVmZXJlbmNlIG9mIHlvdXIgRUZJCiMjIFN5c3RlbSBQYXJ0aXRpb24s
+IHRoZW4gcHV0IHRoaXMgZmlsZSBpbnRvIGEKIyMgYGhvb2tzL2xvYWQta2V5LmQv
+YCBkaXJlY3RvcnkgaW4geW91ciBFU1AsIGFuZCBydW4KIyMgdGhlIGZvbGxvd2lu
+ZyBjb21tYW5kIHRvIG1vZGlmeSB0aGUgWkZTQm9vdE1lbnUKIyMgY29tbWFuZGxp
+bmU6CiMjCiMjICAgICB6Ym0ta2NsIC1yIHpibS5ob29rcm9vdCAtYSB6Ym0uaG9v
+a3Jvb3Q9JHtFU1BfTkFNRX0vLyR7RVNQX1BBVEh9L2hvb2tzICR7WkZTQk9PVE1F
+TlVfRUZJfQoKIyBTd2l0Y2ggdG8gYWx0c2NyZWVuLgpwcmludGYgJ1xlWz8xMDQ5
+aCcgPiAvZGV2L3R0eQoKT1BFTkVEPW5vCndoaWxlIFsgJE9QRU5FRCAnIT0nIHll
+cyBdOyBkbwoJcHJpbnRmICdcZVsybUVudGVyIHBhc3NwaHJhc2UgZm9yICdcJydc
+ZVswbVxlWzFtJXNcZVswbVxlWzJtJ1wnJzogXGVbMG0nICIkWkJNX0xPQ0tFRF9G
+UyIgPiAvZGV2L3R0eQoKCU9MRF9UVFk9IiQoc3R0eSAtZykiCglzdHR5IHJhdyAt
+ZWNobwoKCVBBU1NXT1JEPScnCglET05FPW5vCgl3aGlsZSBbICRET05FICchPScg
+eWVzIF07IGRvCgkJQ0hBUj0iJChoZWFkIC1xIC1jIDEgL2Rldi90dHkgMj4gL2Rl
+di9udWxsKSIKCgkJIyBJbiByYXcgbW9kZSwgPGVudGVyPiB0cmFuc2xhdGVzIHRv
+IFxyLAoJCSMgbm90IFxuCgkJaWYgWyAiJENIQVIiICc9JyAkJ1xuJyBdIHx8IFsg
+IiRDSEFSIiAnPScgJCdccicgXSB8fCBbICIkQ0hBUiIgJz0nICcnIF07IHRoZW4K
+CQkJRE9ORT15ZXMKCgkJIyBcMTc3IGlzIERFTCBrZXk7IG1hbnkgdGVybWluYWxz
+IHRyYW5zbGF0ZQoJCSMgYmFja3NwYWNlIHRvIERFTCBpbiByYXcgbW9kZS4KCQll
+bGlmIFsgIiRDSEFSIiAnPScgJCdcYicgXSB8fCBbICIkQ0hBUiIgJz0nICQnXDE3
+NycgXTsgdGhlbgoJCQlpZiBbICIkUEFTU1dPUkQiICchPScgJycgXTsgdGhlbgoJ
+CQkJcHJpbnRmICdcYiBcYicgPiAvZGV2L3R0eQoJCQkJUEFTU1dPUkQ9JHtQQVNT
+V09SRC8lPy99CgkJCWZpCgoJCSMgSWdub3JlIG90aGVyIGNvbnRyb2wgY2hhcmFj
+dGVycy4KCQllbGlmIFsgIiRDSEFSIiAnPCcgJyAnIF07IHRoZW4KCQkJIyBJZ25v
+cmUKCQkJOgoKCQkjIFByZXN1bWFibHkgYSBub3JtYWwgY2hhcmFjdGVyLgoJCWVs
+c2UKCQkJcHJpbnRmICdcZVs0bSpcZVswbScgPiAvZGV2L3R0eQoJCQlQQVNTV09S
+RD0iJFBBU1NXT1JEJENIQVIiCgkJZmkKCWRvbmUKCXN0dHkgIiRPTERfVFRZIgoK
+CSMgQ2xlYXIgc2NyZWVuLgoJIyBUaGUgYGNsZWFyYCBjb21tYW5kIGlzIHRlY2hu
+aWNhbGx5IG5vdCBpbiBjb3JldXRpbHMsCgkjIGJ1dCBpbiBgbmN1cnNlcy1iaW5g
+LgoJcHJpbnRmICdcZVsySlxlWzNKXHInID4gL2Rldi90dHkKCgllY2hvICIkUEFT
+U1dPUkQiIHwgemZzIGxvYWQta2V5IC1MIHByb21wdCAiJFpCTV9FTkNSWVBUSU9O
+X1JPT1QiID4gL2Rldi9udWxsIDI+JjEKCUVYSVRfQ09ERT0kPwoJaWYgWyAkRVhJ
+VF9DT0RFICc9JyAwIF07IHRoZW4KCQlPUEVORUQ9eWVzCgllbHNlCgkJcHJpbnRm
+ICdcZVszMW1QYXNzcGhyYXNlIGluY29ycmVjdC5cZVswbVxuJyA+IC9kZXYvdHR5
+CglmaQpkb25lCgojIEV4aXQgYWx0c2NyZWVuCnByaW50ZiAnXGVbPzEwNDlsJyA+
+IC9kZXYvdHR5CgpleGl0IDAK
+=6MVR
+-----END PGP ARMORED FILE-----
+ARMOR
+		exit $?
+		;;
+
+	put-passphrase-prompt)
+		if test X"${2+set}" '!=' Xset; then
+			echo "$0": require FILE argument >&2
+			exit 1
+		fi
+		FILE="$2"
+		"$0" print-passphrase-prompt > "$FILE"
+		if test $? != 0; then
+			exit 1
+		fi
+		exec chmod 755 "$FILE"
+		;;
+
+	################################################# Passphrase Prompt
+
 	################################################# Prepare a reference ESP
 
 	print-boot-csv)
@@ -1197,8 +1268,8 @@ BOOTCSV
 		"$0" download-validate-shim "$DIR"/BOOT || exit 1
 		"$0" download-validate-zbm "$DIR"/ZFSBootMenu || exit 1
 
-		echo "---- zfsbootmenu-installer: Sign ZFSBootMenu"
-		sbsign --key "$KEYDIR"/MOK.priv --cert "$KEYDIR"/MOK.pem "$DIR"/ZFSBootMenu/zbm-unsigned.efi --output "$DIR"/ZFSBootMenu/grubx64.efi
+		"$0" mkdir-p "$DIR"/ZFSBootMenu/hs/load-key.d || exit 1
+		"$0" put-passphrase-prompt "$DIR"/ZFSBootMenu/hs/load-key.d/prompt || exit 1
 
 		cat > "$DIR"/ZFSBootMenu/README.txt <<README
 The file named 'grubx64.efi' is ***NOT*** Grub.
@@ -4964,9 +5035,6 @@ Operator Key.
 When booting, you will be asked to
 "Enter passphrase for 'zroot'".
 This is where you enter your password.
-The password will not be displayed, not even as
-asterisks, but it will be checked, just type it in
-and trust it.
 MSG
 		exit 0
 		;;
@@ -5197,19 +5265,57 @@ Installation will continue successfully regardless.
 			exit 1
 		fi
 		DISK=$2
+
+		# Look for MOK signing key.
+		# Prefer the working dir path.
+		if test -d ${WORKDIR}/config/mok; then
+			KEYDIR=${WORKDIR}/config/mok
+		elif test -d /usr/local/mok; then
+			KEYDIR=/usr/local/mok
+		else
+			echo "$0": Cannot find MOK >&2
+			exit 1
+		fi
+
 		ESP=`"$0" get-disk-esp "$DISK"`
-		echo "---- zfsbootmenu-installer: Flashing ESP: $DISK"
+		ESPBYID="`"$0" get-disk-id "$ESP"`"
+
 		"$0" ensure rsync || exit 1
+		"$0" ensure sbsign || exit 1
+
+		echo "---- zfsbootmenu-installer: Flashing ESP: $DISK"
 		"$0" mkdir-p $WORKDIR/mnt || exit 1
 		mount -t vfat "$ESP" $WORKDIR/mnt || exit 1
 		# The `/` after `/esp` is significant!
 		rsync -r $WORKDIR/esp/ $WORKDIR/mnt
+
+		echo "---- zfsbootmenu-installer: Setting ZFSBootMenu passphrase prompt."
+		"$0" zbm-set-hookroot $WORKDIR/mnt/EFI/ZFSBootMenu/zbm-unsigned.efi $WORKDIR/mnt/EFI/ZFSBootMenu/grubx64.efi "$ESPBYID"//EFI/ZFSBootMenu/hs || exit 1
+		echo "---- zfsbootmenu-installer: Signing ZFSBootMenu."
+		sbsign --key "$KEYDIR"/MOK.priv --cert "$KEYDIR"/MOK.pem $WORKDIR/mnt/EFI/ZFSBootMenu/grubx64.efi --output $WORKDIR/mnt/EFI/ZFSBootMenu/grubx64.efi || exit 1
+		chmod 755 $WORKDIR/mnt/EFI/ZFSBootMenu/hs/load-key.d/prompt || exit 1
 
 		sync
 		sleep 1
 		umount -qnR $WORKDIR/mnt
 
 		echo "---- zfsbootmenu-installer: ESP flashed: $DISK"
+		exit 0
+		;;
+
+	zbm-set-hookroot)
+		if test X"${4+set}" '!=' Xset; then
+			echo "$0": require SRCEFI DSTEFI HOOKROOT >&2
+			exit 1
+		fi
+		SRCEFI="$2"
+		DSTEFI="$3"
+		HOOKROOT="$4"
+
+		"$0" ensure zbm-kcl
+
+		/usr/local/bin/zbm-kcl -r zbm.hookroot -a 'zbm.hookroot='"$HOOKROOT" -o "$DSTEFI" "$SRCEFI" || exit 1
+		ls -la "$DSTEFI"
 		exit 0
 		;;
 
